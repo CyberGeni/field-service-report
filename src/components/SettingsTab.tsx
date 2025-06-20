@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
@@ -36,18 +36,38 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
   onSave,
   existingDays
 }) => {
-  const [localDay, setLocalDay] = useState<FieldServiceDay>(
-    fieldServiceDay || {
-      day: 0,
-      type: 'h2h_rv',
-      potentialHours: 2,
-      label: 'Sunday - House to House/Return Visits'
-    }
-  );
+  const [localDay, setLocalDay] = useState<FieldServiceDay>({
+    day: 0,
+    type: 'h2h_rv',
+    potentialHours: 2,
+    label: 'Sunday - House to House/Return Visits'
+  });
   const [error, setError] = useState('');
   const { addToast } = useToast();
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // Reset local state when modal opens/closes or fieldServiceDay changes
+  useEffect(() => {
+    if (isOpen) {
+      if (fieldServiceDay) {
+        // Editing existing day - load its data
+        setLocalDay({ ...fieldServiceDay });
+      } else {
+        // Adding new day - find first available day
+        const usedDays = existingDays.map(day => day.day);
+        const firstAvailableDay = [0, 1, 2, 3, 4, 5, 6].find(day => !usedDays.includes(day)) || 0;
+        
+        setLocalDay({
+          day: firstAvailableDay,
+          type: 'h2h_rv',
+          potentialHours: 2,
+          label: `${dayNames[firstAvailableDay]} - House to House/Return Visits`
+        });
+      }
+      setError('');
+    }
+  }, [isOpen, fieldServiceDay, existingDays]);
 
   const handleSave = () => {
     // Validate potential hours
