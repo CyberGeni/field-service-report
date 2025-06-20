@@ -165,14 +165,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
       <div className="bg-white rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-800">Service Year Progress</h3>
-          {profile?.service_type && (
-            <span className="text-xs text-blue-600 font-medium text-right">
-              {hasHourRequirement(profile.service_type) 
-                ? `${getServiceTypeLabel(profile.service_type)} Requirement`
-                : 'Personal Goal'
-              }
-            </span>
-          )}
+          
         </div>
         
         <div className="space-y-4">
