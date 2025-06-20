@@ -797,14 +797,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 <div className="flex items-center">
                   <button
                     onClick={() => handleEditFieldServiceDay(fieldDay)}
-                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     title="Edit day"
                   >
                     <Edit size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteFieldServiceDay(fieldDay)}
-                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                     title="Delete day"
                   >
                     <Trash2 size={16} />
