@@ -77,9 +77,26 @@ export const useStorage = () => {
 
       if (settingsData) {
         // Parse field service days from database format
-        const fieldServiceDays = settingsData.field_service_days_config 
-          ? JSON.parse(settingsData.field_service_days_config)
-          : DEFAULT_SETTINGS.fieldServiceDays;
+        let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+        
+        // Try to use the new field_service_days_config column first
+        if (settingsData.field_service_days_config) {
+          try {
+            fieldServiceDays = JSON.parse(settingsData.field_service_days_config);
+          } catch (e) {
+            console.warn('Failed to parse field_service_days_config, using default');
+          }
+        }
+        // Fallback to legacy field_service_days if config is not available
+        else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
+          // Convert legacy format to new format
+          fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
+            day,
+            type: index % 2 === 0 ? 'h2h_rv' : 'cart',
+            potentialHours: index % 2 === 0 ? 4 : 2,
+            label: `Day ${day} - Service`
+          }));
+        }
 
         setSettings({
           monthlyTarget: settingsData.monthly_target,
@@ -112,7 +129,6 @@ export const useStorage = () => {
           monthly_target: DEFAULT_SETTINGS.monthlyTarget,
           yearly_target: DEFAULT_SETTINGS.yearlyTarget,
           field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
-          field_service_days_config: JSON.stringify(DEFAULT_SETTINGS.fieldServiceDays),
           service_year_start: DEFAULT_SETTINGS.serviceYearStart
         });
 
@@ -215,21 +231,44 @@ export const useStorage = () => {
 
       const updatedSettings = { ...settings, ...newSettings };
 
-      // Update database
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: user.id,
-          monthly_target: updatedSettings.monthlyTarget,
-          yearly_target: updatedSettings.yearlyTarget,
-          field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format
-          field_service_days_config: JSON.stringify(updatedSettings.fieldServiceDays),
-          service_year_start: updatedSettings.serviceYearStart
-        }, {
-          onConflict: 'user_id'
-        });
+      // Prepare the update data
+      const updateData: any = {
+        user_id: user.id,
+        monthly_target: updatedSettings.monthlyTarget,
+        yearly_target: updatedSettings.yearlyTarget,
+        field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
+        service_year_start: updatedSettings.serviceYearStart
+      };
 
-      if (error) throw error;
+      // Only include field_service_days_config if the column exists
+      // We'll try to update with it, and if it fails, we'll fall back to the legacy format
+      try {
+        updateData.field_service_days_config = JSON.stringify(updatedSettings.fieldServiceDays);
+        
+        const { error } = await supabase
+          .from('user_settings')
+          .upsert(updateData, {
+            onConflict: 'user_id'
+          });
+
+        if (error) throw error;
+      } catch (configError: any) {
+        // If the field_service_days_config column doesn't exist, fall back to legacy format only
+        if (configError.message?.includes('field_service_days_config')) {
+          console.warn('field_service_days_config column not available, using legacy format');
+          delete updateData.field_service_days_config;
+          
+          const { error: fallbackError } = await supabase
+            .from('user_settings')
+            .upsert(updateData, {
+              onConflict: 'user_id'
+            });
+
+          if (fallbackError) throw fallbackError;
+        } else {
+          throw configError;
+        }
+      }
 
       // Update local state
       setSettings(updatedSettings);
