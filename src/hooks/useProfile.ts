@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import { Profile } from '../types'
+import { getServiceTypeTargets } from '../utils/serviceTypes'
 
 export const useProfile = (user: User | null) => {
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -121,14 +122,7 @@ export const useProfile = (user: User | null) => {
   }
 
   const getDefaultTargets = (serviceType: string) => {
-    switch (serviceType) {
-      case 'auxiliary_pioneer':
-        return { monthlyTarget: 30, yearlyTarget: 360 }
-      case 'regular_pioneer':
-        return { monthlyTarget: 50, yearlyTarget: 600 }
-      default:
-        return { monthlyTarget: 10, yearlyTarget: 120 }
-    }
+    return getServiceTypeTargets(serviceType)
   }
 
   return {

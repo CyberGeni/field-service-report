@@ -1,10 +1,12 @@
-import { ServiceRecord, MonthlyStats, YearlyStats, Settings } from '../types';
+import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile } from '../types';
 import { getCurrentMonth, getTotalMinutes } from './dateUtils';
+import { getServiceTypeTargets } from './serviceTypes';
 
 export const calculateMonthlyStats = (
   records: ServiceRecord[],
   settings: Settings,
-  month: string
+  month: string,
+  profile?: Profile | null
 ): MonthlyStats => {
   const monthRecords = records.filter(record => record.date.startsWith(month));
   
@@ -13,7 +15,12 @@ export const calculateMonthlyStats = (
   }, 0);
   
   const totalHours = totalMinutes / 60;
-  const targetHours = settings.monthlyTarget;
+  
+  // Use service type targets if profile exists, otherwise fall back to settings
+  const targetHours = profile?.service_type 
+    ? getServiceTypeTargets(profile.service_type).monthlyTarget
+    : settings.monthlyTarget;
+  
   const deficit = Math.max(0, targetHours - totalHours);
   const surplus = Math.max(0, totalHours - targetHours);
   
@@ -28,7 +35,8 @@ export const calculateMonthlyStats = (
 
 export const calculateYearlyStats = (
   records: ServiceRecord[],
-  settings: Settings
+  settings: Settings,
+  profile?: Profile | null
 ): YearlyStats => {
   const currentDate = new Date();
   const serviceYearStart = new Date(settings.serviceYearStart + '-01');
@@ -44,7 +52,11 @@ export const calculateYearlyStats = (
   }, 0);
   
   const totalHours = totalMinutes / 60;
-  const targetHours = settings.yearlyTarget;
+  
+  // Use service type targets if profile exists, otherwise fall back to settings
+  const targetHours = profile?.service_type 
+    ? getServiceTypeTargets(profile.service_type).yearlyTarget
+    : settings.yearlyTarget;
   
   const monthsElapsed = Math.floor((currentDate.getTime() - serviceYearStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
   const monthsRemaining = Math.max(0, 12 - monthsElapsed);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { User, Upload, Camera, AlertCircle } from 'lucide-react'
 import { Profile } from '../types'
+import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes'
 
 interface ProfileSetupProps {
   onComplete: (profileData: {
@@ -79,28 +80,6 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
       setError(err.message || 'Failed to create profile')
     } finally {
       setUploading(false)
-    }
-  }
-
-  const getServiceTypeDescription = (type: string) => {
-    switch (type) {
-      case 'auxiliary_pioneer':
-        return '30 hours monthly, 360 hours yearly'
-      case 'regular_pioneer':
-        return '50 hours monthly, 600 hours yearly'
-      default:
-        return 'Set your own targets'
-    }
-  }
-
-  const getServiceTypeLabel = (type: string) => {
-    switch (type) {
-      case 'auxiliary_pioneer':
-        return 'Auxiliary Pioneer'
-      case 'regular_pioneer':
-        return 'Regular Pioneer'
-      default:
-        return 'Publisher'
     }
   }
 

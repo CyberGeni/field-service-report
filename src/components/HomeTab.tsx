@@ -3,6 +3,7 @@ import { Clock, Target, TrendingUp, TrendingDown, User } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
 import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor } from '../utils/calculations';
 import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort } from '../utils/dateUtils';
+import { getServiceTypeTargets, getServiceTypeLabel } from '../utils/serviceTypes';
 import CircularProgress from './CircularProgress';
 
 interface HomeTabProps {
@@ -13,8 +14,8 @@ interface HomeTabProps {
 
 const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
   const currentMonth = getCurrentMonth();
-  const monthlyStats = calculateMonthlyStats(records, settings, currentMonth);
-  const yearlyStats = calculateYearlyStats(records, settings);
+  const monthlyStats = calculateMonthlyStats(records, settings, currentMonth, profile);
+  const yearlyStats = calculateYearlyStats(records, settings, profile);
   
   const monthProgress = getProgressPercentage(monthlyStats.totalHours, monthlyStats.targetHours);
   const yearProgress = getProgressPercentage(yearlyStats.totalHours, yearlyStats.targetHours);
@@ -52,36 +53,10 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     return formatHoursMinutesShort(dailyHours);
   };
 
-  // Get the actual target for this month (which might be adjusted)
-  const getMonthlyTargetDisplay = () => {
-    const currentDate = new Date();
-    const currentDay = currentDate.getDate();
-    const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-    
-    // If we're past the middle of the month and behind, we might need to adjust expectations
-    // But for now, we'll show the base target and indicate if they're behind/ahead
-    return Math.round(monthlyStats.targetHours);
-  };
-
   const timeOfDay = getTimeOfDayGreeting();
   const todaysDate = getTodaysDate();
   const dailyTarget = getDailyTarget();
   const displayName = profile?.name || settings.username || 'Friend';
-  const monthlyTarget = getMonthlyTargetDisplay();
-
-  // Get service type display
-  const getServiceTypeDisplay = (serviceType?: string) => {
-    switch (serviceType) {
-      case 'auxiliary_pioneer':
-        return 'Auxiliary Pioneer';
-      case 'regular_pioneer':
-        return 'Regular Pioneer';
-      case 'publisher':
-        return 'Publisher';
-      default:
-        return '';
-    }
-  };
 
   // Determine progress bar color based on progress
   const getProgressColor = (progress: number) => {
@@ -93,43 +68,88 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
 
   // Get target display with color-coded status
   const getTargetDisplay = () => {
-    const targetText = `Target for ${getMonthName(currentMonth).split(' ')[0]}: ${monthlyTarget}h `;
+    const monthName = getMonthName(currentMonth).split(' ')[0];
+    const serviceTypeInfo = profile?.service_type ? getServiceTypeTargets(profile.service_type) : null;
+    const targetSource = serviceTypeInfo ? serviceTypeInfo.label : 'Custom';
+    
+    const targetText = `Target for ${monthName}: ${Math.round(monthlyStats.targetHours)}h `;
     
     if (monthlyStats.deficit > 0) {
       return (
-        <span>
-          {targetText}
-          <span className="text-red-600 font-semibold">
-            ({formatHoursMinutesShort(monthlyStats.deficit)} behind)
+        <div className="text-center">
+          <span>
+            {targetText}
+            <span className="text-red-600 font-semibold">
+              ({formatHoursMinutesShort(monthlyStats.deficit)} behind)
+            </span>
           </span>
-        </span>
+          {serviceTypeInfo && (
+            <p className="text-xs text-gray-500 mt-1">
+              {targetSource} requirement
+            </p>
+          )}
+        </div>
       );
     } else if (monthlyStats.surplus > 0) {
       return (
-        <span>
-          {targetText}
-          <span className="text-green-600 font-semibold">
-            ({formatHoursMinutesShort(monthlyStats.surplus)} ahead)
+        <div className="text-center">
+          <span>
+            {targetText}
+            <span className="text-green-600 font-semibold">
+              ({formatHoursMinutesShort(monthlyStats.surplus)} ahead)
+            </span>
           </span>
-        </span>
+          {serviceTypeInfo && (
+            <p className="text-xs text-gray-500 mt-1">
+              {targetSource} requirement
+            </p>
+          )}
+        </div>
       );
     }
     
     return (
-      <span>
-        {targetText}
-        <span className="text-gray-600 font-semibold">
-          (on target)
+      <div className="text-center">
+        <span>
+          {targetText}
+          <span className="text-gray-600 font-semibold">
+            (on target)
+          </span>
         </span>
-      </span>
+        {serviceTypeInfo && (
+          <p className="text-xs text-gray-500 mt-1">
+            {targetSource} requirement
+          </p>
+        )}
+      </div>
     );
   };
 
   return (
     <div className="space-y-4">
       {/* Profile Header */}
-      <div className="text-center py-6">      
-        <h1 className="text-3xl font-bold text-gray-800 mb-4 ">
+      <div className="text-center py-6">
+        {/* Avatar and Service Type */}
+        {profile && (
+          <div className="flex flex-col items-center mb-4">
+            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden mb-2">
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User size={24} className="text-gray-400" />
+              )}
+            </div>
+            <p className="text-sm text-blue-600 font-medium">
+              {getServiceTypeLabel(profile.service_type)}
+            </p>
+          </div>
+        )}
+        
+        <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">
           Good {timeOfDay}, {displayName}!
         </h1>
         <p className="text-gray-600 text-lg tracking-tight">
@@ -157,54 +177,22 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
         </CircularProgress>
         
         <div className="mt-6">
-          <p className="text-gray-600 font-medium">
+          <div className="text-gray-600 font-medium">
             {getTargetDisplay()}
-          </p>
+          </div>
         </div>
       </div>
 
-      {/* Status Cards */}
-      {/* <div className="grid grid-cols-2 gap-4">
-      
-        <div className="bg-white rounded-xl p-6">
-          <div className="flex items-center justify-between mb-3">
-            <Target size={24} className="text-blue-500" />
-            <span className={`text-xl font-bold ${getStatusColor(monthlyStats.totalHours, monthlyStats.targetHours)}`}>
-              {monthlyStats.deficit > 0 ? (
-                <div className="flex items-center">
-                  <TrendingDown size={18} className="mr-1" />
-                  -{formatHoursMinutesShort(monthlyStats.deficit)}
-                </div>
-              ) : (
-                <div className="flex items-center">
-                  <TrendingUp size={18} className="mr-1" />
-                  +{formatHoursMinutesShort(monthlyStats.surplus)}
-                </div>
-              )}
-            </span>
-          </div>
-          <h3 className="font-semibold text-gray-800">Monthly Goal</h3>
-          <p className="text-sm text-gray-600">
-            {monthlyStats.deficit > 0 ? 'Behind schedule' : 'Ahead of schedule'}
-          </p>
-        </div>
-
-  
-        <div className="bg-white rounded-xl p-6">
-          <div className="flex items-center justify-between mb-3">
-            <Clock size={24} className="text-green-500" />
-            <span className="text-2xl font-bold text-green-600">
-              {monthlyStats.recordsCount}
-            </span>
-          </div>
-          <h3 className="font-semibold text-gray-800">Service Days</h3>
-          <p className="text-sm text-gray-600">This month</p>
-        </div>
-      </div> */}
-
       {/* Yearly Progress */}
       <div className="bg-white rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Service Year Progress</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">Service Year Progress</h3>
+          {profile?.service_type && (
+            <span className="text-xs text-blue-600 font-medium">
+              {getServiceTypeLabel(profile.service_type)}
+            </span>
+          )}
+        </div>
         
         <div className="space-y-4">
           <div className="flex justify-between items-center">

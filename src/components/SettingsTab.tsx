@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit } from 'lucide-react';
 import { Settings, Profile } from '../types';
+import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes';
 
 interface SettingsTabProps {
   settings: Settings;
@@ -105,7 +106,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     setLocalProfile(prev => prev ? { ...prev, service_type: serviceType } : prev);
     
     // Update default targets based on service type
-    const defaultTargets = getDefaultTargets(serviceType);
+    const defaultTargets = getServiceTypeTargets(serviceType);
     setLocalSettings(prev => ({
       ...prev,
       monthlyTarget: defaultTargets.monthlyTarget,
@@ -113,29 +114,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }));
   };
 
-  const getDefaultTargets = (serviceType: string) => {
-    switch (serviceType) {
-      case 'auxiliary_pioneer':
-        return { monthlyTarget: 30, yearlyTarget: 360 };
-      case 'regular_pioneer':
-        return { monthlyTarget: 50, yearlyTarget: 600 };
-      default:
-        return { monthlyTarget: 10, yearlyTarget: 120 };
-    }
-  };
-
-  const getServiceTypeLabel = (type: string) => {
-    switch (type) {
-      case 'auxiliary_pioneer':
-        return 'Auxiliary Pioneer';
-      case 'regular_pioneer':
-        return 'Regular Pioneer';
-      default:
-        return 'Publisher';
-    }
-  };
-
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  // Get current targets based on service type
+  const currentTargets = localProfile?.service_type 
+    ? getServiceTypeTargets(localProfile.service_type)
+    : { monthlyTarget: localSettings.monthlyTarget, yearlyTarget: localSettings.yearlyTarget };
 
   return (
     <div className="space-y-6">
@@ -212,16 +196,21 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                         : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                     }`}
                   >
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="radio"
-                        name="serviceType"
-                        value={option.value}
-                        checked={localProfile?.service_type === option.value}
-                        onChange={(e) => handleServiceTypeChange(e.target.value as any)}
-                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                      />
-                      <span className="font-medium text-gray-800">{option.label}</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="radio"
+                          name="serviceType"
+                          value={option.value}
+                          checked={localProfile?.service_type === option.value}
+                          onChange={(e) => handleServiceTypeChange(e.target.value as any)}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                        />
+                        <span className="font-medium text-gray-800">{option.label}</span>
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {getServiceTypeDescription(option.value)}
+                      </span>
                     </div>
                   </label>
                 ))}
@@ -238,40 +227,61 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <h3 className="text-lg font-semibold text-gray-800">Hour Requirements</h3>
         </div>
         
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Target (hours)</label>
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={localSettings.monthlyTarget}
-              onChange={(e) => setLocalSettings(prev => ({ ...prev, monthlyTarget: parseInt(e.target.value) || 10 }))}
-              className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-            />
+        {localProfile?.service_type ? (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+            <p className="text-blue-800 font-medium mb-2">
+              {getServiceTypeLabel(localProfile.service_type)} Requirements
+            </p>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-blue-600">Monthly:</span>
+                <span className="font-semibold ml-2">{currentTargets.monthlyTarget}h</span>
+              </div>
+              <div>
+                <span className="text-blue-600">Yearly:</span>
+                <span className="font-semibold ml-2">{currentTargets.yearlyTarget}h</span>
+              </div>
+            </div>
+            <p className="text-xs text-blue-600 mt-2">
+              These targets are automatically set based on your service type
+            </p>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Yearly Target (hours)</label>
-            <input
-              type="number"
-              min="12"
-              max="1000"
-              value={localSettings.yearlyTarget}
-              onChange={(e) => setLocalSettings(prev => ({ ...prev, yearlyTarget: parseInt(e.target.value) || 120 }))}
-              className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-            />
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Target (hours)</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={localSettings.monthlyTarget}
+                onChange={(e) => setLocalSettings(prev => ({ ...prev, monthlyTarget: parseInt(e.target.value) || 10 }))}
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Yearly Target (hours)</label>
+              <input
+                type="number"
+                min="12"
+                max="1000"
+                value={localSettings.yearlyTarget}
+                onChange={(e) => setLocalSettings(prev => ({ ...prev, yearlyTarget: parseInt(e.target.value) || 120 }))}
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+              />
+            </div>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Service Year Start</label>
-            <input
-              type="month"
-              value={localSettings.serviceYearStart}
-              onChange={(e) => setLocalSettings(prev => ({ ...prev, serviceYearStart: e.target.value }))}
-              className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-            />
-          </div>
+        )}
+        
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Service Year Start</label>
+          <input
+            type="month"
+            value={localSettings.serviceYearStart}
+            onChange={(e) => setLocalSettings(prev => ({ ...prev, serviceYearStart: e.target.value }))}
+            className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+          />
         </div>
       </div>
 
