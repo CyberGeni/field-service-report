@@ -124,7 +124,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     <img
                       src={localProfile.avatar_url}
                       alt={localProfile.name}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover aspect-square"
                     />
                   ) : (
                     <User size={28} className="text-gray-400" />
