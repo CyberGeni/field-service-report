@@ -124,7 +124,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     <img
                       src={localProfile.avatar_url}
                       alt={localProfile.name}
-                      className="w-24 object-cover aspect-square"
+                      className="w-full h-full object-cover aspect-square"
                     />
                   ) : (
                     <User size={28} className="text-gray-400" />
@@ -298,7 +298,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="bg-white rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
-              <User size={24} className="text-blue-500" />
+              <User size={24} className="text-blue-500 aspect-square" />
               <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
             </div>
             <button
