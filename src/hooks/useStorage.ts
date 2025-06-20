@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { ServiceRecord, Settings } from '../types';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './useAuth';
 
 const DEFAULT_SETTINGS: Settings = {
-  monthlyTarget: 50,
-  yearlyTarget: 600,
+  monthlyTarget: 10,
+  yearlyTarget: 120,
   fieldServiceDays: [0, 6], // Sunday and Saturday
   username: '',
   password: '',
@@ -13,52 +15,227 @@ const DEFAULT_SETTINGS: Settings = {
 export const useStorage = () => {
   const [records, setRecords] = useState<ServiceRecord[]>([]);
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
 
+  // Load data when user changes
   useEffect(() => {
-    // Load data from localStorage
-    const savedRecords = localStorage.getItem('fieldService_records');
-    const savedSettings = localStorage.getItem('fieldService_settings');
-
-    if (savedRecords) {
-      try {
-        setRecords(JSON.parse(savedRecords));
-      } catch (error) {
-        console.error('Error loading records:', error);
-      }
+    if (user) {
+      loadData();
+    } else {
+      // Clear data when user logs out
+      setRecords([]);
+      setSettings(DEFAULT_SETTINGS);
+      setLoading(false);
     }
+  }, [user]);
 
-    if (savedSettings) {
-      try {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) });
-      } catch (error) {
-        console.error('Error loading settings:', error);
+  const loadData = async () => {
+    if (!user) return;
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load service records
+      const { data: recordsData, error: recordsError } = await supabase
+        .from('service_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
+
+      if (recordsError) throw recordsError;
+
+      // Transform database records to match our ServiceRecord type
+      const transformedRecords: ServiceRecord[] = (recordsData || []).map(record => ({
+        id: record.id,
+        date: record.date,
+        hours: record.hours,
+        minutes: record.minutes,
+        type: record.type as 'h2h' | 'rv' | 'cart',
+        notes: record.notes || undefined
+      }));
+
+      setRecords(transformedRecords);
+
+      // Load user settings
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (settingsError && settingsError.code !== 'PGRST116') {
+        throw settingsError;
       }
-    }
-  }, []);
 
-  const saveRecord = (record: ServiceRecord) => {
-    const updatedRecords = [...records.filter(r => r.id !== record.id), record];
-    setRecords(updatedRecords);
-    localStorage.setItem('fieldService_records', JSON.stringify(updatedRecords));
+      if (settingsData) {
+        setSettings({
+          monthlyTarget: settingsData.monthly_target,
+          yearlyTarget: settingsData.yearly_target,
+          fieldServiceDays: settingsData.field_service_days,
+          serviceYearStart: settingsData.service_year_start,
+          username: '', // We'll get this from profile
+          password: '' // Not stored in database
+        });
+      } else {
+        // Create default settings for new user
+        await createDefaultSettings();
+      }
+    } catch (err: any) {
+      console.error('Error loading data:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const deleteRecord = (id: string) => {
-    const updatedRecords = records.filter(r => r.id !== id);
-    setRecords(updatedRecords);
-    localStorage.setItem('fieldService_records', JSON.stringify(updatedRecords));
+  const createDefaultSettings = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .insert({
+          user_id: user.id,
+          monthly_target: DEFAULT_SETTINGS.monthlyTarget,
+          yearly_target: DEFAULT_SETTINGS.yearlyTarget,
+          field_service_days: DEFAULT_SETTINGS.fieldServiceDays,
+          service_year_start: DEFAULT_SETTINGS.serviceYearStart
+        });
+
+      if (error) throw error;
+    } catch (err: any) {
+      console.error('Error creating default settings:', err);
+    }
   };
 
-  const updateSettings = (newSettings: Partial<Settings>) => {
-    const updatedSettings = { ...settings, ...newSettings };
-    setSettings(updatedSettings);
-    localStorage.setItem('fieldService_settings', JSON.stringify(updatedSettings));
+  const saveRecord = async (record: ServiceRecord) => {
+    if (!user) {
+      setError('User not authenticated');
+      return;
+    }
+
+    try {
+      setError(null);
+
+      // Check if record already exists (for updates)
+      const existingRecord = records.find(r => r.id === record.id);
+
+      if (existingRecord) {
+        // Update existing record
+        const { error } = await supabase
+          .from('service_records')
+          .update({
+            date: record.date,
+            hours: record.hours,
+            minutes: record.minutes,
+            type: record.type,
+            notes: record.notes || null
+          })
+          .eq('id', record.id)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+      } else {
+        // Insert new record
+        const { error } = await supabase
+          .from('service_records')
+          .insert({
+            id: record.id,
+            user_id: user.id,
+            date: record.date,
+            hours: record.hours,
+            minutes: record.minutes,
+            type: record.type,
+            notes: record.notes || null
+          });
+
+        if (error) throw error;
+      }
+
+      // Update local state
+      const updatedRecords = [...records.filter(r => r.id !== record.id), record]
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setRecords(updatedRecords);
+
+    } catch (err: any) {
+      console.error('Error saving record:', err);
+      setError(err.message);
+    }
+  };
+
+  const deleteRecord = async (id: string) => {
+    if (!user) {
+      setError('User not authenticated');
+      return;
+    }
+
+    try {
+      setError(null);
+
+      const { error } = await supabase
+        .from('service_records')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      // Update local state
+      const updatedRecords = records.filter(r => r.id !== id);
+      setRecords(updatedRecords);
+
+    } catch (err: any) {
+      console.error('Error deleting record:', err);
+      setError(err.message);
+    }
+  };
+
+  const updateSettings = async (newSettings: Partial<Settings>) => {
+    if (!user) {
+      setError('User not authenticated');
+      return;
+    }
+
+    try {
+      setError(null);
+
+      const updatedSettings = { ...settings, ...newSettings };
+
+      // Update database
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: user.id,
+          monthly_target: updatedSettings.monthlyTarget,
+          yearly_target: updatedSettings.yearlyTarget,
+          field_service_days: updatedSettings.fieldServiceDays,
+          service_year_start: updatedSettings.serviceYearStart
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) throw error;
+
+      // Update local state
+      setSettings(updatedSettings);
+
+    } catch (err: any) {
+      console.error('Error updating settings:', err);
+      setError(err.message);
+    }
   };
 
   return {
     records,
     settings,
+    loading,
+    error,
     saveRecord,
     deleteRecord,
-    updateSettings
+    updateSettings,
+    refetch: loadData
   };
 };

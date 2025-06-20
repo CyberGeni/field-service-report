@@ -129,7 +129,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     <div className="space-y-4">
       {/* Profile Header */}
       <div className="text-center py-6">      
-        <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">
+        <h1 className="text-3xl font-bold text-gray-800 mb-4 ">
           Good {timeOfDay}, {displayName}!
         </h1>
         <p className="text-gray-600 text-lg tracking-tight">

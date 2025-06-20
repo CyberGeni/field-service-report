@@ -20,9 +20,9 @@ type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [authView, setAuthView] = useState<AuthView>('splash');
-  const { records, settings, saveRecord, updateSettings } = useStorage();
+  const { records, settings, loading: storageLoading, saveRecord, updateSettings } = useStorage();
   const { timerState, startTimer, pauseTimer, stopTimer } = useTimer();
-  const { user, loading, signIn, signUp, signOut, resetPassword } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
   const { profile, loading: profileLoading, createProfile, updateProfile, uploadAvatar, getDefaultTargets } = useProfile(user);
 
   // Register service worker for PWA
@@ -52,8 +52,8 @@ function App() {
     }
   }, [profile?.service_type]);
 
-  // Show loading screen while checking auth
-  if (loading || profileLoading) {
+  // Show loading screen while checking auth or loading data
+  if (authLoading || (user && (profileLoading || storageLoading))) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 flex items-center justify-center">
         <div className="text-center">
