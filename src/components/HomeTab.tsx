@@ -3,7 +3,7 @@ import { Clock, Target, TrendingUp, TrendingDown, User } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
 import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor } from '../utils/calculations';
 import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort } from '../utils/dateUtils';
-import { getServiceTypeTargets, getServiceTypeLabel } from '../utils/serviceTypes';
+import { getServiceTypeTargets, getServiceTypeLabel, hasHourRequirement } from '../utils/serviceTypes';
 import CircularProgress from './CircularProgress';
 
 interface HomeTabProps {
@@ -69,8 +69,9 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
   // Get target display with color-coded status
   const getTargetDisplay = () => {
     const monthName = getMonthName(currentMonth).split(' ')[0];
-    const serviceTypeInfo = profile?.service_type ? getServiceTypeTargets(profile.service_type) : null;
-    const targetSource = serviceTypeInfo ? serviceTypeInfo.label : 'Custom';
+    const hasRequirements = profile?.service_type && hasHourRequirement(profile.service_type);
+    const serviceTypeInfo = hasRequirements ? getServiceTypeTargets(profile.service_type) : null;
+    const targetSource = serviceTypeInfo ? serviceTypeInfo.label : 'Personal Goal';
     
     const targetText = `Target for ${monthName}: ${Math.round(monthlyStats.targetHours)}h `;
     
@@ -83,11 +84,9 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
               ({formatHoursMinutesShort(monthlyStats.deficit)} behind)
             </span>
           </span>
-          {serviceTypeInfo && (
-            <p className="text-xs text-gray-500 mt-1">
-              {targetSource} requirement
-            </p>
-          )}
+          <p className="text-xs text-gray-500 mt-1">
+            {hasRequirements ? `${targetSource} requirement` : targetSource}
+          </p>
         </div>
       );
     } else if (monthlyStats.surplus > 0) {
@@ -99,11 +98,9 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
               ({formatHoursMinutesShort(monthlyStats.surplus)} ahead)
             </span>
           </span>
-          {serviceTypeInfo && (
-            <p className="text-xs text-gray-500 mt-1">
-              {targetSource} requirement
-            </p>
-          )}
+          <p className="text-xs text-gray-500 mt-1">
+            {hasRequirements ? `${targetSource} requirement` : targetSource}
+          </p>
         </div>
       );
     }
@@ -116,11 +113,9 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
             (on target)
           </span>
         </span>
-        {serviceTypeInfo && (
-          <p className="text-xs text-gray-500 mt-1">
-            {targetSource} requirement
-          </p>
-        )}
+        <p className="text-xs text-gray-500 mt-1">
+          {hasRequirements ? `${targetSource} requirement` : targetSource}
+        </p>
       </div>
     );
   };
@@ -189,7 +184,10 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           <h3 className="text-lg font-semibold text-gray-800">Service Year Progress</h3>
           {profile?.service_type && (
             <span className="text-xs text-blue-600 font-medium">
-              {getServiceTypeLabel(profile.service_type)}
+              {hasHourRequirement(profile.service_type) 
+                ? `${getServiceTypeLabel(profile.service_type)} Requirement`
+                : 'Personal Goal'
+              }
             </span>
           )}
         </div>

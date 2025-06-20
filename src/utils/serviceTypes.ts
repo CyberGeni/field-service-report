@@ -4,19 +4,23 @@ export const getServiceTypeTargets = (serviceType: string) => {
       return { 
         monthlyTarget: 30, 
         yearlyTarget: 360,
-        label: 'Auxiliary Pioneer'
+        label: 'Auxiliary Pioneer',
+        hasRequirement: true
       };
     case 'regular_pioneer':
       return { 
         monthlyTarget: 50, 
         yearlyTarget: 600,
-        label: 'Regular Pioneer'
+        label: 'Regular Pioneer',
+        hasRequirement: true
       };
+    case 'publisher':
     default:
       return { 
-        monthlyTarget: 10, 
-        yearlyTarget: 120,
-        label: 'Publisher'
+        monthlyTarget: 10, // Default suggestion
+        yearlyTarget: 120, // Default suggestion
+        label: 'Publisher',
+        hasRequirement: false
       };
   }
 };
@@ -34,5 +38,14 @@ export const getServiceTypeLabel = (serviceType: string) => {
 
 export const getServiceTypeDescription = (serviceType: string) => {
   const targets = getServiceTypeTargets(serviceType);
-  return `${targets.monthlyTarget} hours monthly, ${targets.yearlyTarget} hours yearly`;
+  
+  if (targets.hasRequirement) {
+    return `${targets.monthlyTarget} hours monthly, ${targets.yearlyTarget} hours yearly`;
+  } else {
+    return 'Set your own personal goals';
+  }
+};
+
+export const hasHourRequirement = (serviceType: string): boolean => {
+  return serviceType === 'auxiliary_pioneer' || serviceType === 'regular_pioneer';
 };

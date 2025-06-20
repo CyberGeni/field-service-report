@@ -1,6 +1,6 @@
 import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile } from '../types';
 import { getCurrentMonth, getTotalMinutes } from './dateUtils';
-import { getServiceTypeTargets } from './serviceTypes';
+import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 
 export const calculateMonthlyStats = (
   records: ServiceRecord[],
@@ -16,8 +16,9 @@ export const calculateMonthlyStats = (
   
   const totalHours = totalMinutes / 60;
   
-  // Use service type targets if profile exists, otherwise fall back to settings
-  const targetHours = profile?.service_type 
+  // Use service type targets only if the service type has requirements
+  // Otherwise, use custom settings
+  const targetHours = (profile?.service_type && hasHourRequirement(profile.service_type))
     ? getServiceTypeTargets(profile.service_type).monthlyTarget
     : settings.monthlyTarget;
   
@@ -53,8 +54,9 @@ export const calculateYearlyStats = (
   
   const totalHours = totalMinutes / 60;
   
-  // Use service type targets if profile exists, otherwise fall back to settings
-  const targetHours = profile?.service_type 
+  // Use service type targets only if the service type has requirements
+  // Otherwise, use custom settings
+  const targetHours = (profile?.service_type && hasHourRequirement(profile.service_type))
     ? getServiceTypeTargets(profile.service_type).yearlyTarget
     : settings.yearlyTarget;
   

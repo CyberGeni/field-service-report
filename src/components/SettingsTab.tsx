@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit } from 'lucide-react';
 import { Settings, Profile } from '../types';
-import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes';
+import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 
 interface SettingsTabProps {
   settings: Settings;
@@ -105,19 +105,25 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     // Update profile
     setLocalProfile(prev => prev ? { ...prev, service_type: serviceType } : prev);
     
-    // Update default targets based on service type
-    const defaultTargets = getServiceTypeTargets(serviceType);
-    setLocalSettings(prev => ({
-      ...prev,
-      monthlyTarget: defaultTargets.monthlyTarget,
-      yearlyTarget: defaultTargets.yearlyTarget
-    }));
+    // Only update targets automatically for pioneers (who have requirements)
+    if (hasHourRequirement(serviceType)) {
+      const defaultTargets = getServiceTypeTargets(serviceType);
+      setLocalSettings(prev => ({
+        ...prev,
+        monthlyTarget: defaultTargets.monthlyTarget,
+        yearlyTarget: defaultTargets.yearlyTarget
+      }));
+    }
+    // For publishers, keep their custom targets
   };
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+  // Check if current service type has requirements
+  const serviceTypeHasRequirements = localProfile?.service_type && hasHourRequirement(localProfile.service_type);
+  
   // Get current targets based on service type
-  const currentTargets = localProfile?.service_type 
+  const currentTargets = serviceTypeHasRequirements 
     ? getServiceTypeTargets(localProfile.service_type)
     : { monthlyTarget: localSettings.monthlyTarget, yearlyTarget: localSettings.yearlyTarget };
 
@@ -227,10 +233,10 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <h3 className="text-lg font-semibold text-gray-800">Hour Requirements</h3>
         </div>
         
-        {localProfile?.service_type ? (
+        {serviceTypeHasRequirements ? (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
             <p className="text-blue-800 font-medium mb-2">
-              {getServiceTypeLabel(localProfile.service_type)} Requirements
+              {getServiceTypeLabel(localProfile!.service_type)} Requirements
             </p>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -248,6 +254,13 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
+              <p className="text-green-800 font-medium mb-1">Personal Goals</p>
+              <p className="text-xs text-green-600">
+                As a publisher, you can set your own personal service goals
+              </p>
+            </div>
+            
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Target (hours)</label>
               <input
