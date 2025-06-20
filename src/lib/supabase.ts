@@ -12,5 +12,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true
-  }
+  },
+  global: {
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  },
 })
+
+// Helper function to handle auth state
+export const getAuthUser = () => {
+  return supabase.auth.getUser()
+}
+
+// Helper function to get current session
+export const getSession = () => {
+  return supabase.auth.getSession()
+}

@@ -1,129 +1,117 @@
 import { useState, useEffect } from 'react'
-import { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { Profile } from '../types'
-import { getServiceTypeTargets } from '../utils/serviceTypes'
+import { useAuth } from './useAuth'
 
-export const useProfile = (user: User | null) => {
+export interface Profile {
+  id: string
+  name: string
+  avatar_url?: string
+  service_type: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'
+  created_at?: string
+  updated_at?: string
+}
+
+export function useProfile() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (user) {
-      fetchProfile()
-    } else {
-      setProfile(null)
-      setLoading(false)
-    }
-  }, [user])
+  const { user } = useAuth()
 
   const fetchProfile = async () => {
-    if (!user) return
-
     try {
       setLoading(true)
       setError(null)
 
-      const { data, error } = await supabase
+      if (!user) {
+        setProfile(null)
+        return
+      }
+
+      const { data, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .maybeSingle()
+        .single()
 
-      if (error) {
-        throw error
+      if (fetchError) {
+        if (fetchError.code === 'PGRST116') {
+          // No profile found - this is expected for new users
+          setProfile(null)
+        } else {
+          console.error('Error fetching profile:', fetchError)
+          setError(fetchError.message)
+        }
+        return
       }
 
       setProfile(data)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      console.error('Unexpected error fetching profile:', err)
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
       setLoading(false)
     }
   }
 
-  const createProfile = async (profileData: {
-    name: string
-    service_type: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'
-    avatar_url?: string
-  }) => {
-    if (!user) throw new Error('No user found')
-
+  const createProfile = async (profileData: Omit<Profile, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      setError(null)
+      if (!user) {
+        throw new Error('No authenticated user')
+      }
 
-      const { data, error } = await supabase
+      const { data, error: createError } = await supabase
         .from('profiles')
-        .insert({
-          id: user.id,
-          ...profileData
-        })
+        .insert([
+          {
+            id: user.id,
+            ...profileData
+          }
+        ])
         .select()
         .single()
 
-      if (error) throw error
+      if (createError) {
+        console.error('Error creating profile:', createError)
+        throw createError
+      }
 
       setProfile(data)
-      return { data, error: null }
-    } catch (err: any) {
-      setError(err.message)
-      return { data: null, error: err }
+      return data
+    } catch (err) {
+      console.error('Error creating profile:', err)
+      throw err
     }
   }
 
-  const updateProfile = async (updates: Partial<Profile>) => {
-    if (!user || !profile) throw new Error('No user or profile found')
-
+  const updateProfile = async (updates: Partial<Omit<Profile, 'id' | 'created_at' | 'updated_at'>>) => {
     try {
-      setError(null)
+      if (!user || !profile) {
+        throw new Error('No authenticated user or profile')
+      }
 
-      const { data, error } = await supabase
+      const { data, error: updateError } = await supabase
         .from('profiles')
         .update(updates)
         .eq('id', user.id)
         .select()
         .single()
 
-      if (error) throw error
+      if (updateError) {
+        console.error('Error updating profile:', updateError)
+        throw updateError
+      }
 
       setProfile(data)
-      return { data, error: null }
-    } catch (err: any) {
-      setError(err.message)
-      return { data: null, error: err }
+      return data
+    } catch (err) {
+      console.error('Error updating profile:', err)
+      throw err
     }
   }
 
-  const uploadAvatar = async (file: File) => {
-    if (!user) throw new Error('No user found')
-
-    try {
-      setError(null)
-
-      const fileExt = file.name.split('.').pop()
-      const fileName = `${user.id}/avatar.${fileExt}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true })
-
-      if (uploadError) throw uploadError
-
-      const { data } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName)
-
-      return { data: data.publicUrl, error: null }
-    } catch (err: any) {
-      setError(err.message)
-      return { data: null, error: err }
-    }
-  }
-
-  const getDefaultTargets = (serviceType: string) => {
-    return getServiceTypeTargets(serviceType)
-  }
+  useEffect(() => {
+    fetchProfile()
+  }, [user])
 
   return {
     profile,
@@ -131,8 +119,6 @@ export const useProfile = (user: User | null) => {
     error,
     createProfile,
     updateProfile,
-    uploadAvatar,
-    getDefaultTargets,
     refetch: fetchProfile
   }
 }

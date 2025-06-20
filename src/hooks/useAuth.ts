@@ -2,79 +2,118 @@ import { useState, useEffect } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
-export interface AuthState {
-  user: User | null
-  session: Session | null
-  loading: boolean
-}
-
-export const useAuth = () => {
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    session: null,
-    loading: true
-  })
+export function useAuth() {
+  const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setAuthState({
-        user: session?.user ?? null,
-        session,
-        loading: false
-      })
-    })
+    const getInitialSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) {
+          console.error('Error getting session:', error)
+        } else {
+          setSession(session)
+          setUser(session?.user ?? null)
+        }
+      } catch (err) {
+        console.error('Unexpected error getting session:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    getInitialSession()
 
     // Listen for auth changes
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthState({
-        user: session?.user ?? null,
-        session,
-        loading: false
-      })
-    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email)
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
+      }
+    )
 
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: window.location.origin
+  const signIn = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (error) {
+        throw error
       }
-    })
-    return { data, error }
+
+      return data
+    } catch (error) {
+      console.error('Sign in error:', error)
+      throw error
+    }
   }
 
-  const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-    return { data, error }
+  const signUp = async (email: string, password: string) => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      })
+
+      if (error) {
+        throw error
+      }
+
+      return data
+    } catch (error) {
+      console.error('Sign up error:', error)
+      throw error
+    }
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    return { error }
+    try {
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        throw error
+      }
+    } catch (error) {
+      console.error('Sign out error:', error)
+      throw error
+    }
   }
 
   const resetPassword = async (email: string) => {
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`
-    })
-    return { data, error }
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      })
+
+      if (error) {
+        throw error
+      }
+    } catch (error) {
+      console.error('Reset password error:', error)
+      throw error
+    }
   }
 
   return {
-    ...authState,
-    signUp,
+    user,
+    session,
+    loading,
     signIn,
+    signUp,
     signOut,
-    resetPassword
+    resetPassword,
   }
 }
