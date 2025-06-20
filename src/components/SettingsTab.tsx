@@ -119,7 +119,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             {/* Avatar */}
             <div className="text-center">
               <div className="relative inline-block">
-                <div className="w-fit rounded-full bg-gray-200 flex items-center justify-center overflow-hidden aspect-square">
+                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden aspect-square">
                   {localProfile.avatar_url ? (
                     <img
                       src={localProfile.avatar_url}
