@@ -125,24 +125,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
       {/* Profile Header */}
       <div className="text-center py-6">
         {/* Avatar and Service Type */}
-        {profile && (
-          <div className="flex flex-col items-center mb-4">
-            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden mb-2">
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.name}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <User size={24} className="text-gray-400" />
-              )}
-            </div>
-            <p className="text-sm text-blue-600 font-medium">
-              {getServiceTypeLabel(profile.service_type)}
-            </p>
-          </div>
-        )}
+        
         
         <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">
           Good {timeOfDay}, {displayName}!
