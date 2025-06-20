@@ -39,23 +39,45 @@ const EntryModal: React.FC<EntryModalProps> = ({
     if (isOpen) {
       // Reset form when modal opens
       if (existingRecords.length > 0) {
-        // If there are existing records, edit the first one
-        const record = existingRecords[0];
-        setEditingRecord(record);
-        setSelectedType(record.type);
-        setHours(record.hours);
-        setMinutes(record.minutes);
-        setNotes(record.notes || '');
+        // If there are existing records, we need to show the combined total for the selected type
+        // For editing, we'll show the total time for all records of the selected type on this date
+        const recordsOfType = existingRecords.filter(r => r.type === selectedType);
+        if (recordsOfType.length > 0) {
+          // Calculate total time for this service type
+          const totalMinutes = recordsOfType.reduce((total, record) => {
+            return total + (record.hours * 60) + record.minutes;
+          }, 0);
+          
+          const totalHours = Math.floor(totalMinutes / 60);
+          const remainingMinutes = totalMinutes % 60;
+          
+          // Use the first record as the base for editing (they'll all be merged anyway)
+          setEditingRecord(recordsOfType[0]);
+          setHours(totalHours);
+          setMinutes(remainingMinutes);
+          
+          // Combine notes from all records of this type
+          const allNotes = recordsOfType
+            .map(r => r.notes)
+            .filter(note => note && note.trim())
+            .join('; ');
+          setNotes(allNotes);
+        } else {
+          // No records of the selected type exist
+          setEditingRecord(null);
+          setHours(0);
+          setMinutes(0);
+          setNotes('');
+        }
       } else {
         // New entry
         setEditingRecord(null);
-        setSelectedType('h2h');
         setHours(0);
         setMinutes(0);
         setNotes('');
       }
     }
-  }, [isOpen, existingRecords]);
+  }, [isOpen, existingRecords, selectedType]);
 
   const handleSave = () => {
     if (hours === 0 && minutes === 0) {
@@ -89,7 +111,12 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
   const handleDelete = () => {
     if (editingRecord && onDelete) {
-      onDelete(editingRecord.id);
+      // Delete all records for this date and type
+      const recordsToDelete = existingRecords.filter(r => r.type === selectedType);
+      recordsToDelete.forEach(record => {
+        onDelete(record.id);
+      });
+      
       addToast({
         type: 'success',
         title: 'Entry Deleted',
@@ -194,6 +221,15 @@ const EntryModal: React.FC<EntryModalProps> = ({
                 rows={3}
               />
             </div>
+
+            {/* Info about merging */}
+            {existingRecords.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                <p className="text-blue-800 text-sm">
+                  💡 This will replace all existing {selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} entries for this date with the time you enter above.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Actions */}
@@ -375,7 +411,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <p className="text-blue-800 text-sm font-medium">
-          💡 Click on any day to add or edit your service time for that date
+          💡 Click on any day to add or edit your service time. Multiple entries for the same day and service type will be automatically merged.
         </p>
       </div>
 
