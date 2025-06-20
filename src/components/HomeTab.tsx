@@ -183,7 +183,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
             </span>
           </div>
           
-          <div className="bg-gray-200 rounded-full h-3">
+          <div className="bg-[#F3F4F6] rounded-full h-3">
             <div 
               className={`rounded-full h-3 transition-all duration-500 ${getProgressBarColor(yearlyStats.totalHours, yearlyStats.targetHours)}`}
               style={{ width: `${Math.min(100, yearProgress)}%` }}
