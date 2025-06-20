@@ -29,8 +29,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
   existingRecords
 }) => {
   const [selectedType, setSelectedType] = useState<'h2h' | 'cart'>('h2h');
-  const [hours, setHours] = useState(0);
-  const [minutes, setMinutes] = useState(0);
+  const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState('');
   const [notes, setNotes] = useState('');
   const [editingRecord, setEditingRecord] = useState<ServiceRecord | null>(null);
   const { addToast } = useToast();
@@ -53,8 +53,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
           
           // Use the first record as the base for editing (they'll all be merged anyway)
           setEditingRecord(recordsOfType[0]);
-          setHours(totalHours);
-          setMinutes(remainingMinutes);
+          setHours(totalHours.toString());
+          setMinutes(remainingMinutes.toString());
           
           // Combine notes from all records of this type
           const allNotes = recordsOfType
@@ -65,22 +65,25 @@ const EntryModal: React.FC<EntryModalProps> = ({
         } else {
           // No records of the selected type exist
           setEditingRecord(null);
-          setHours(0);
-          setMinutes(0);
+          setHours('');
+          setMinutes('');
           setNotes('');
         }
       } else {
         // New entry
         setEditingRecord(null);
-        setHours(0);
-        setMinutes(0);
+        setHours('');
+        setMinutes('');
         setNotes('');
       }
     }
   }, [isOpen, existingRecords, selectedType]);
 
   const handleSave = () => {
-    if (hours === 0 && minutes === 0) {
+    const hoursNum = parseInt(hours) || 0;
+    const minutesNum = parseInt(minutes) || 0;
+    
+    if (hoursNum === 0 && minutesNum === 0) {
       addToast({
         type: 'error',
         title: 'Invalid Entry',
@@ -92,8 +95,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
     const record: ServiceRecord = {
       id: editingRecord?.id || crypto.randomUUID(),
       date: selectedDate,
-      hours,
-      minutes,
+      hours: hoursNum,
+      minutes: minutesNum,
       type: selectedType,
       notes: notes.trim() || undefined
     };
@@ -103,7 +106,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     addToast({
       type: 'success',
       title: editingRecord ? 'Entry Updated' : 'Entry Added',
-      description: `${hours}h ${minutes}m logged for ${new Date(selectedDate).toLocaleDateString()}`
+      description: `${hoursNum}h ${minutesNum}m logged for ${new Date(selectedDate).toLocaleDateString()}`
     });
     
     onClose();
@@ -193,8 +196,9 @@ const EntryModal: React.FC<EntryModalProps> = ({
                   min="0"
                   max="24"
                   value={hours}
-                  onChange={(e) => setHours(parseInt(e.target.value) || 0)}
+                  onChange={(e) => setHours(e.target.value)}
                   className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                  placeholder="0"
                 />
               </div>
               <div>
@@ -204,8 +208,9 @@ const EntryModal: React.FC<EntryModalProps> = ({
                   min="0"
                   max="59"
                   value={minutes}
-                  onChange={(e) => setMinutes(parseInt(e.target.value) || 0)}
+                  onChange={(e) => setMinutes(e.target.value)}
                   className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                  placeholder="0"
                 />
               </div>
             </div>
@@ -251,7 +256,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={hours === 0 && minutes === 0}
+              disabled={(!hours || parseInt(hours) === 0) && (!minutes || parseInt(minutes) === 0)}
               className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
             >
               {editingRecord ? <Edit size={16} /> : <Plus size={16} />}
@@ -333,23 +338,26 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
       <button
         key={day}
         onClick={() => handleDayClick(day)}
-        className={`relative h-20 p-1 w-full text-left transition-colors hover:bg-gray-100 ${
+        className={`relative h-20 p-1 w-full text-left transition-colors hover:bg-gray-100 flex flex-col ${
           isToday ? 'bg-blue-50' : 'bg-white'
         }`}
       >
-        <div className={`text-sm font-medium ${
+        {/* Date number at the top */}
+        <div className={`text-sm font-medium mb-1 ${
           isToday ? 'text-blue-600' : 
           isFieldDay ? 'text-gray-800' : 'text-gray-400'
         }`}>
           {day}
         </div>
         
+        {/* Field service day indicator */}
         {isFieldDay && !hasRecords && (
-          <div className="absolute top-6 left-1 w-2 h-2 bg-gray-300 rounded-full" />
+          <div className="w-2 h-2 bg-gray-300 rounded-full mb-1" />
         )}
         
+        {/* Service record entry */}
         {hasRecords && (
-          <div className="absolute top-6 left-1 right-1 bottom-1">
+          <div className="flex-1 min-h-0">
             <div className={`${getServiceTypeColor(dayRecords)} rounded p-1 text-white text-xs h-full flex items-center justify-center`}>
               <div className="text-center">
                 <div className="font-semibold text-sm">
