@@ -8,9 +8,7 @@ const DEFAULT_SETTINGS: Settings = {
   yearlyTarget: 120,
   fieldServiceDays: [
     { day: 6, type: 'h2h_rv', potentialHours: 5, label: 'Saturday - House to House/Return Visits' },
-    { day: 1, type: 'cart', potentialHours: 2, label: 'Monday - Cart Witnessing' },
-    { day: 3, type: 'cart', potentialHours: 2, label: 'Wednesday - Cart Witnessing' },
-    { day: 4, type: 'h2h_rv', potentialHours: 4, label: 'Thursday - House to House/Return Visits' }
+    { day: 0, type: 'h2h_rv', potentialHours: 3, label: 'Sunday - House to House/Return Visits' }
   ],
   username: '',
   password: '',
@@ -82,7 +80,7 @@ export const useStorage = () => {
         // Try to use the new field_service_days_config column first
         if (settingsData.field_service_days_config) {
           try {
-            fieldServiceDays = JSON.parse(settingsData.field_service_days_config);
+            fieldServiceDays = settingsData.field_service_days_config;
           } catch (e) {
             console.warn('Failed to parse field_service_days_config, using default');
           }
@@ -90,11 +88,12 @@ export const useStorage = () => {
         // Fallback to legacy field_service_days if config is not available
         else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
           // Convert legacy format to new format
+          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
           fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
             day,
             type: index % 2 === 0 ? 'h2h_rv' : 'cart',
             potentialHours: index % 2 === 0 ? 4 : 2,
-            label: `Day ${day} - Service`
+            label: `${dayNames[day]} - ${index % 2 === 0 ? 'House to House/Return Visits' : 'Cart Witnessing'}`
           }));
         }
 
@@ -129,6 +128,7 @@ export const useStorage = () => {
           monthly_target: DEFAULT_SETTINGS.monthlyTarget,
           yearly_target: DEFAULT_SETTINGS.yearlyTarget,
           field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
+          field_service_days_config: DEFAULT_SETTINGS.fieldServiceDays, // New format
           service_year_start: DEFAULT_SETTINGS.serviceYearStart
         });
 
@@ -237,38 +237,17 @@ export const useStorage = () => {
         monthly_target: updatedSettings.monthlyTarget,
         yearly_target: updatedSettings.yearlyTarget,
         field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
+        field_service_days_config: updatedSettings.fieldServiceDays, // New format with full structure
         service_year_start: updatedSettings.serviceYearStart
       };
 
-      // Only include field_service_days_config if the column exists
-      // We'll try to update with it, and if it fails, we'll fall back to the legacy format
-      try {
-        updateData.field_service_days_config = JSON.stringify(updatedSettings.fieldServiceDays);
-        
-        const { error } = await supabase
-          .from('user_settings')
-          .upsert(updateData, {
-            onConflict: 'user_id'
-          });
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert(updateData, {
+          onConflict: 'user_id'
+        });
 
-        if (error) throw error;
-      } catch (configError: any) {
-        // If the field_service_days_config column doesn't exist, fall back to legacy format only
-        if (configError.message?.includes('field_service_days_config')) {
-          console.warn('field_service_days_config column not available, using legacy format');
-          delete updateData.field_service_days_config;
-          
-          const { error: fallbackError } = await supabase
-            .from('user_settings')
-            .upsert(updateData, {
-              onConflict: 'user_id'
-            });
-
-          if (fallbackError) throw fallbackError;
-        } else {
-          throw configError;
-        }
-      }
+      if (error) throw error;
 
       // Update local state
       setSettings(updatedSettings);
@@ -276,6 +255,7 @@ export const useStorage = () => {
     } catch (err: any) {
       console.error('Error updating settings:', err);
       setError(err.message);
+      throw err; // Re-throw to allow UI to handle the error
     }
   };
 
