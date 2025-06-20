@@ -440,7 +440,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
   const selectedDateRecords = selectedDate ? records.filter(r => r.date === selectedDate) : [];
 
   return (
-    <div className="space-y-6 pb-6">
+    <div className="space-y-4 pb-6">
       {/* Header */}
       <div className="flex items-center justify-between bg-white rounded-xl p-6">
         <button
