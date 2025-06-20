@@ -157,17 +157,16 @@ const LogTab: React.FC<LogTabProps> = ({
       {/* Service Type Selection */}
       <div className="bg-white rounded-xl p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Service Type</h3>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           {[
-            { id: 'h2h', label: 'House to House', icon: Briefcase },
-            { id: 'rv', label: 'Return Visit', icon: Briefcase },
+            { id: 'h2h', label: 'House to House / Return Visits', icon: Briefcase },
             { id: 'cart', label: 'Cart Witnessing', icon: BaggageClaim }
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setSelectedType(id as 'h2h' | 'rv' | 'cart')}
               className={`p-3 rounded-xl transition-all duration-200 ${
-                selectedType === id
+                selectedType === id || (selectedType === 'rv' && id === 'h2h')
                   ? 'bg-blue-50 text-blue-700'
                   : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
               }`}
