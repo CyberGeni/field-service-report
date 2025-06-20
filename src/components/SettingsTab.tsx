@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X, Plus, Trash2, MapPin, ShoppingCart } from 'lucide-react';
+import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 import { useToast } from './ui/toast';
@@ -71,8 +71,8 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
 
   const getServiceTypeIcon = (type: string) => {
     switch (type) {
-      case 'h2h_rv': return <MapPin size={16} className="text-blue-600" />;
-      case 'cart': return <ShoppingCart size={16} className="text-purple-600" />;
+      case 'h2h_rv': return <Briefcase size={16} className="text-blue-600" />;
+      case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
       default: return null;
     }
   };
@@ -108,7 +108,7 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
                       value={fieldDay.day}
                       onChange={(e) => updateFieldServiceDay(index, { 
                         day: parseInt(e.target.value),
-                        label: `${dayNames[parseInt(e.target.value)]} - ${fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
+                        label: `${dayNames[parseInt(e.target.value)]} - ${fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
                       })}
                       className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -124,12 +124,12 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
                       value={fieldDay.type}
                       onChange={(e) => updateFieldServiceDay(index, { 
                         type: e.target.value as 'h2h_rv' | 'cart',
-                        label: `${dayNames[fieldDay.day]} - ${e.target.value === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
+                        label: `${dayNames[fieldDay.day]} - ${e.target.value === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
                       })}
                       className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
                       <option value="h2h_rv">House to House / Return Visits</option>
-                      <option value="cart">Cart Ministry</option>
+                      <option value="cart">Cart Witnessing</option>
                     </select>
                   </div>
                   
@@ -515,8 +515,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
   const getServiceTypeIcon = (type: string) => {
     switch (type) {
-      case 'h2h_rv': return <MapPin size={16} className="text-blue-600" />;
-      case 'cart': return <ShoppingCart size={16} className="text-purple-600" />;
+      case 'h2h_rv': return <Briefcase size={16} className="text-blue-600" />;
+      case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
       default: return null;
     }
   };
@@ -665,7 +665,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                       {dayNames[fieldDay.day]}
                     </p>
                     <p className="text-sm text-gray-600">
-                      {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Ministry'}
+                      {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Witnessing'}
                     </p>
                   </div>
                 </div>

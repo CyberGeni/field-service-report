@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, Plus, MapPin, Car, ShoppingCart } from 'lucide-react';
+import { Clock, Plus, Briefcase, BaggageClaim } from 'lucide-react';
 import { ServiceRecord, TimerState } from '../types';
 import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
@@ -121,9 +121,9 @@ const LogTab: React.FC<LogTabProps> = ({
 
   const getServiceTypeIcon = (type: string) => {
     switch (type) {
-      case 'h2h': return <MapPin size={20} />;
-      case 'rv': return <Car size={20} />;
-      case 'cart': return <ShoppingCart size={20} />;
+      case 'h2h': return <Briefcase size={20} />;
+      case 'rv': return <Briefcase size={20} />;
+      case 'cart': return <BaggageClaim size={20} />;
       default: return <Clock size={20} />;
     }
   };
@@ -159,9 +159,9 @@ const LogTab: React.FC<LogTabProps> = ({
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Service Type</h3>
         <div className="grid grid-cols-3 gap-3">
           {[
-            { id: 'h2h', label: 'House to House', icon: MapPin },
-            { id: 'rv', label: 'Return Visit', icon: Car },
-            { id: 'cart', label: 'Cart/Metro', icon: ShoppingCart }
+            { id: 'h2h', label: 'House to House', icon: Briefcase },
+            { id: 'rv', label: 'Return Visit', icon: Briefcase },
+            { id: 'cart', label: 'Cart Witnessing', icon: BaggageClaim }
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}

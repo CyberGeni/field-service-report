@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, MapPin, Car, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Briefcase, BaggageClaim } from 'lucide-react';
 import { ServiceRecord, Settings } from '../types';
 import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes } from '../utils/dateUtils';
 
@@ -37,9 +37,9 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
   const getServiceTypeIcon = (type: string, size = 16) => {
     const props = { size, className: "text-white" };
     switch (type) {
-      case 'h2h': return <MapPin {...props} />;
-      case 'rv': return <Car {...props} />;
-      case 'cart': return <ShoppingCart {...props} />;
+      case 'h2h': return <Briefcase {...props} />;
+      case 'rv': return <Briefcase {...props} />;
+      case 'cart': return <BaggageClaim {...props} />;
       default: return null;
     }
   };
@@ -141,7 +141,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-3 h-3 bg-purple-500 rounded"></div>
-            <span>Cart/Metro</span>
+            <span>Cart Witnessing</span>
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-3 h-3 bg-gray-300 rounded"></div>
