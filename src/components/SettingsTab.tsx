@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit } from 'lucide-react';
+import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X } from 'lucide-react';
 import { Settings, Profile } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 
@@ -12,6 +12,225 @@ interface SettingsTabProps {
   onSignOut: () => Promise<{ error: any }>;
 }
 
+interface EditProfileModalProps {
+  profile: Profile;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (updates: Partial<Profile>) => Promise<void>;
+  onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
+}
+
+const EditProfileModal: React.FC<EditProfileModalProps> = ({
+  profile,
+  isOpen,
+  onClose,
+  onSave,
+  onUploadAvatar
+}) => {
+  const [localProfile, setLocalProfile] = useState(profile);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUploadAvatar) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+    try {
+      const { data: avatarUrl, error: uploadError } = await onUploadAvatar(file);
+      
+      if (uploadError) {
+        setError('Failed to upload avatar: ' + uploadError.message);
+        return;
+      }
+
+      if (avatarUrl) {
+        setLocalProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
+      }
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      setError('Failed to upload avatar');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!localProfile.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      await onSave({
+        name: localProfile.name,
+        service_type: localProfile.service_type,
+        avatar_url: localProfile.avatar_url
+      });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-800">Edit Profile</h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {/* Avatar */}
+            <div className="text-center">
+              <div className="relative inline-block">
+                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {localProfile.avatar_url ? (
+                    <img
+                      src={localProfile.avatar_url}
+                      alt={localProfile.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User size={28} className="text-gray-400" />
+                  )}
+                </div>
+                {onUploadAvatar && (
+                  <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1.5 rounded-full cursor-pointer transition-colors">
+                    <Camera size={14} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                      disabled={uploading || saving}
+                    />
+                  </label>
+                )}
+              </div>
+              {uploading && (
+                <p className="text-sm text-blue-600 mt-2">Uploading...</p>
+              )}
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+              <input
+                type="text"
+                value={localProfile.name}
+                onChange={(e) => setLocalProfile(prev => ({ ...prev, name: e.target.value }))}
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                placeholder="Enter your name"
+                disabled={saving}
+              />
+            </div>
+
+            {/* Service Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
+              <div className="space-y-2">
+                {[
+                  { value: 'publisher', label: 'Publisher' },
+                  { value: 'auxiliary_pioneer', label: 'Auxiliary Pioneer' },
+                  { value: 'regular_pioneer', label: 'Regular Pioneer' }
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`block p-3 rounded-xl border cursor-pointer transition-all ${
+                      localProfile.service_type === option.value
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="radio"
+                          name="serviceType"
+                          value={option.value}
+                          checked={localProfile.service_type === option.value}
+                          onChange={(e) => setLocalProfile(prev => ({ 
+                            ...prev, 
+                            service_type: e.target.value as 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'
+                          }))}
+                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                          disabled={saving}
+                        />
+                        <span className="font-medium text-gray-800">{option.label}</span>
+                      </div>
+                      <span className="text-sm text-gray-600">
+                        {getServiceTypeDescription(option.value)}
+                      </span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex space-x-3 mt-6">
+            <button
+              onClick={onClose}
+              disabled={saving}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || !localProfile.name.trim()}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center"
+            >
+              {saving ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                'Save Changes'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SettingsTab: React.FC<SettingsTabProps> = ({ 
   settings, 
   profile,
@@ -21,23 +240,15 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   onSignOut 
 }) => {
   const [localSettings, setLocalSettings] = useState(settings);
-  const [localProfile, setLocalProfile] = useState(profile);
   const [showPassword, setShowPassword] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
     try {
       onUpdateSettings(localSettings);
-      
-      if (onUpdateProfile && localProfile && profile) {
-        await onUpdateProfile({
-          name: localProfile.name,
-          service_type: localProfile.service_type
-        });
-      }
     } catch (error) {
       console.error('Save error:', error);
     } finally {
@@ -56,40 +267,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !onUploadAvatar || !onUpdateProfile) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be less than 5MB');
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const { data: avatarUrl, error } = await onUploadAvatar(file);
-      
-      if (error) {
-        alert('Failed to upload avatar: ' + error.message);
-        return;
-      }
-
-      if (avatarUrl) {
-        await onUpdateProfile({ avatar_url: avatarUrl });
-        setLocalProfile(prev => prev ? { ...prev, avatar_url: avatarUrl } : prev);
-      }
-    } catch (error) {
-      console.error('Avatar upload error:', error);
-      alert('Failed to upload avatar');
-    } finally {
-      setUploading(false);
+  const handleProfileUpdate = async (updates: Partial<Profile>) => {
+    if (onUpdateProfile) {
+      await onUpdateProfile(updates);
     }
   };
 
@@ -101,126 +281,55 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     setLocalSettings(prev => ({ ...prev, fieldServiceDays: newDays }));
   };
 
-  const handleServiceTypeChange = (serviceType: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer') => {
-    // Update profile
-    setLocalProfile(prev => prev ? { ...prev, service_type: serviceType } : prev);
-    
-    // Only update targets automatically for pioneers (who have requirements)
-    if (hasHourRequirement(serviceType)) {
-      const defaultTargets = getServiceTypeTargets(serviceType);
-      setLocalSettings(prev => ({
-        ...prev,
-        monthlyTarget: defaultTargets.monthlyTarget,
-        yearlyTarget: defaultTargets.yearlyTarget
-      }));
-    }
-    // For publishers, keep their custom targets
-  };
-
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   // Check if current service type has requirements
-  const serviceTypeHasRequirements = localProfile?.service_type && hasHourRequirement(localProfile.service_type);
+  const serviceTypeHasRequirements = profile?.service_type && hasHourRequirement(profile.service_type);
   
   // Get current targets based on service type
   const currentTargets = serviceTypeHasRequirements 
-    ? getServiceTypeTargets(localProfile.service_type)
+    ? getServiceTypeTargets(profile.service_type)
     : { monthlyTarget: localSettings.monthlyTarget, yearlyTarget: localSettings.yearlyTarget };
 
   return (
     <div className="space-y-6">
-      {/* Profile Section */}
+      {/* Profile Display Section */}
       {profile && (
         <div className="bg-white rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
-            <User size={24} className="text-blue-500" />
-            <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-3">
+              <User size={24} className="text-blue-500" />
+              <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
+            </div>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="flex items-center space-x-2 bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-2 rounded-lg transition-colors"
+            >
+              <Edit size={16} />
+              <span className="text-sm font-medium">Edit</span>
+            </button>
           </div>
           
-          <div className="space-y-4">
-            {/* Avatar */}
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                  {localProfile?.avatar_url ? (
-                    <img
-                      src={localProfile.avatar_url}
-                      alt={localProfile.name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <User size={24} className="text-gray-400" />
-                  )}
-                </div>
-                {onUploadAvatar && (
-                  <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1 rounded-full cursor-pointer transition-colors">
-                    <Camera size={12} />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarChange}
-                      className="hidden"
-                      disabled={uploading}
-                    />
-                  </label>
-                )}
-              </div>
-              <div>
-                <p className="font-medium text-gray-800">{localProfile?.name}</p>
-                <p className="text-sm text-gray-600">
-                  {getServiceTypeLabel(localProfile?.service_type || 'publisher')}
-                </p>
-              </div>
+          <div className="flex items-center space-x-4">
+            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <User size={24} className="text-gray-400" />
+              )}
             </div>
-
-            {/* Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
-              <input
-                type="text"
-                value={localProfile?.name || ''}
-                onChange={(e) => setLocalProfile(prev => prev ? { ...prev, name: e.target.value } : prev)}
-                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-                placeholder="Enter your name"
-              />
-            </div>
-
-            {/* Service Type */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
-              <div className="space-y-2">
-                {[
-                  { value: 'publisher', label: 'Publisher' },
-                  { value: 'auxiliary_pioneer', label: 'Auxiliary Pioneer' },
-                  { value: 'regular_pioneer', label: 'Regular Pioneer' }
-                ].map((option) => (
-                  <label
-                    key={option.value}
-                    className={`block p-3 rounded-xl border cursor-pointer transition-all ${
-                      localProfile?.service_type === option.value
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <input
-                          type="radio"
-                          name="serviceType"
-                          value={option.value}
-                          checked={localProfile?.service_type === option.value}
-                          onChange={(e) => handleServiceTypeChange(e.target.value as any)}
-                          className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                        />
-                        <span className="font-medium text-gray-800">{option.label}</span>
-                      </div>
-                      <span className="text-sm text-gray-600">
-                        {getServiceTypeDescription(option.value)}
-                      </span>
-                    </div>
-                  </label>
-                ))}
-              </div>
+              <p className="font-semibold text-gray-800 text-lg">{profile.name}</p>
+              <p className="text-gray-600">
+                {getServiceTypeLabel(profile.service_type)} 
+                <span className="text-gray-500 ml-1">
+                  ({getServiceTypeDescription(profile.service_type)})
+                </span>
+              </p>
             </div>
           </div>
         </div>
@@ -236,7 +345,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         {serviceTypeHasRequirements ? (
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
             <p className="text-blue-800 font-medium mb-2">
-              {getServiceTypeLabel(localProfile!.service_type)} Requirements
+              {getServiceTypeLabel(profile!.service_type)} Requirements
             </p>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
@@ -356,6 +465,17 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           )}
         </button>
       </div>
+
+      {/* Edit Profile Modal */}
+      {profile && (
+        <EditProfileModal
+          profile={profile}
+          isOpen={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSave={handleProfileUpdate}
+          onUploadAvatar={onUploadAvatar}
+        />
+      )}
     </div>
   );
 };
