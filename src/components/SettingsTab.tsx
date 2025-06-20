@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim } from 'lucide-react';
+import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 import { useToast } from './ui/toast';
@@ -446,31 +446,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 }) => {
   const [localSettings, setLocalSettings] = useState(settings);
   const [signingOut, setSigningOut] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
   const { addToast } = useToast();
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      onUpdateSettings(localSettings);
-      addToast({
-        type: 'success',
-        title: 'Settings Saved',
-        description: 'Your settings have been updated successfully'
-      });
-    } catch (error) {
-      console.error('Save error:', error);
-      addToast({
-        type: 'error',
-        title: 'Save Failed',
-        description: 'Failed to save settings'
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -499,8 +477,59 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const handleFieldServiceDaysUpdate = (days: FieldServiceDay[]) => {
-    setLocalSettings(prev => ({ ...prev, fieldServiceDays: days }));
+  const handleFieldServiceDaysUpdate = async (days: FieldServiceDay[]) => {
+    try {
+      const updatedSettings = { ...localSettings, fieldServiceDays: days };
+      setLocalSettings(updatedSettings);
+      await onUpdateSettings(updatedSettings);
+    } catch (error) {
+      console.error('Error updating field service days:', error);
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        description: 'Failed to save field service days'
+      });
+    }
+  };
+
+  const handleTargetChange = async (field: 'monthlyTarget' | 'yearlyTarget', value: number) => {
+    try {
+      const updatedSettings = { ...localSettings, [field]: value };
+      setLocalSettings(updatedSettings);
+      await onUpdateSettings(updatedSettings);
+      addToast({
+        type: 'success',
+        title: 'Target Updated',
+        description: `${field === 'monthlyTarget' ? 'Monthly' : 'Yearly'} target updated successfully`
+      });
+    } catch (error) {
+      console.error('Error updating target:', error);
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        description: 'Failed to save target'
+      });
+    }
+  };
+
+  const handleServiceYearChange = async (value: string) => {
+    try {
+      const updatedSettings = { ...localSettings, serviceYearStart: value };
+      setLocalSettings(updatedSettings);
+      await onUpdateSettings(updatedSettings);
+      addToast({
+        type: 'success',
+        title: 'Service Year Updated',
+        description: 'Service year start date updated successfully'
+      });
+    } catch (error) {
+      console.error('Error updating service year:', error);
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        description: 'Failed to save service year'
+      });
+    }
   };
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -626,7 +655,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 min="1"
                 max="100"
                 value={localSettings.monthlyTarget}
-                onChange={(e) => setLocalSettings(prev => ({ ...prev, monthlyTarget: parseInt(e.target.value) || 10 }))}
+                onChange={(e) => handleTargetChange('monthlyTarget', parseInt(e.target.value) || 10)}
                 className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
               />
             </div>
@@ -638,7 +667,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 min="12"
                 max="1000"
                 value={localSettings.yearlyTarget}
-                onChange={(e) => setLocalSettings(prev => ({ ...prev, yearlyTarget: parseInt(e.target.value) || 120 }))}
+                onChange={(e) => handleTargetChange('yearlyTarget', parseInt(e.target.value) || 120)}
                 className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
               />
             </div>
@@ -650,7 +679,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <input
             type="month"
             value={localSettings.serviceYearStart}
-            onChange={(e) => setLocalSettings(prev => ({ ...prev, serviceYearStart: e.target.value }))}
+            onChange={(e) => handleServiceYearChange(e.target.value)}
             className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
           />
         </div>
@@ -701,24 +730,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <p className="text-sm">Click Edit to add your typical field service days</p>
           </div>
         )}
-      </div>
-
-      {/* Save Settings Button */}
-      <div className="space-y-4">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-4 px-6 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
-        >
-          {saving ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <Save size={20} />
-              <span>Save Settings</span>
-            </>
-          )}
-        </button>
       </div>
 
       {/* Edit Profile Modal */}
