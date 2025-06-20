@@ -11,11 +11,10 @@ export interface Profile {
   updated_at?: string
 }
 
-export function useProfile() {
+export function useProfile(user: any) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { user } = useAuth()
 
   const fetchProfile = async () => {
     try {
@@ -109,6 +108,47 @@ export function useProfile() {
     }
   }
 
+  const uploadAvatar = async (file: File) => {
+    try {
+      if (!user) {
+        throw new Error('No authenticated user')
+      }
+
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+
+      const { data, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          upsert: true
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
+      return { data: publicUrl, error: null }
+    } catch (err: any) {
+      console.error('Error uploading avatar:', err)
+      return { data: null, error: err }
+    }
+  }
+
+  const getDefaultTargets = (serviceType: string) => {
+    switch (serviceType) {
+      case 'auxiliary_pioneer':
+        return { monthlyTarget: 30, yearlyTarget: 360 };
+      case 'regular_pioneer':
+        return { monthlyTarget: 50, yearlyTarget: 600 };
+      default:
+        return { monthlyTarget: 10, yearlyTarget: 120 };
+    }
+  }
+
   useEffect(() => {
     fetchProfile()
   }, [user])
@@ -119,6 +159,8 @@ export function useProfile() {
     error,
     createProfile,
     updateProfile,
+    uploadAvatar,
+    getDefaultTargets,
     refetch: fetchProfile
   }
 }
