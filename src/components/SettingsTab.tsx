@@ -316,7 +316,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover aspect-square"
                 />
               ) : (
                 <User size={24} className="text-gray-400" />
