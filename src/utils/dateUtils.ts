@@ -41,8 +41,8 @@ export const getTimerDisplay = (milliseconds: number): string => {
   return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const isFieldServiceDay = (date: Date, fieldServiceDays: number[]): boolean => {
-  return fieldServiceDays.includes(date.getDay());
+export const isFieldServiceDay = (date: Date, fieldServiceDays: any[]): boolean => {
+  return fieldServiceDays.some(fsd => fsd.day === date.getDay());
 };
 
 export const getDateString = (date: Date): string => {

@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
-import { ServiceRecord, Settings } from '../types';
+import { ServiceRecord, Settings, FieldServiceDay } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 
 const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
   yearlyTarget: 120,
-  fieldServiceDays: [0, 6], // Sunday and Saturday
+  fieldServiceDays: [
+    { day: 6, type: 'h2h_rv', potentialHours: 5, label: 'Saturday - House to House/Return Visits' },
+    { day: 1, type: 'cart', potentialHours: 2, label: 'Monday - Cart' },
+    { day: 3, type: 'cart', potentialHours: 2, label: 'Wednesday - Cart' },
+    { day: 4, type: 'h2h_rv', potentialHours: 4, label: 'Thursday - House to House/Return Visits' }
+  ],
   username: '',
   password: '',
   serviceYearStart: '2024-09'
@@ -71,10 +76,15 @@ export const useStorage = () => {
       }
 
       if (settingsData) {
+        // Parse field service days from database format
+        const fieldServiceDays = settingsData.field_service_days_config 
+          ? JSON.parse(settingsData.field_service_days_config)
+          : DEFAULT_SETTINGS.fieldServiceDays;
+
         setSettings({
           monthlyTarget: settingsData.monthly_target,
           yearlyTarget: settingsData.yearly_target,
-          fieldServiceDays: settingsData.field_service_days,
+          fieldServiceDays,
           serviceYearStart: settingsData.service_year_start,
           username: '', // We'll get this from profile
           password: '' // Not stored in database
@@ -101,7 +111,8 @@ export const useStorage = () => {
           user_id: user.id,
           monthly_target: DEFAULT_SETTINGS.monthlyTarget,
           yearly_target: DEFAULT_SETTINGS.yearlyTarget,
-          field_service_days: DEFAULT_SETTINGS.fieldServiceDays,
+          field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
+          field_service_days_config: JSON.stringify(DEFAULT_SETTINGS.fieldServiceDays),
           service_year_start: DEFAULT_SETTINGS.serviceYearStart
         });
 
@@ -211,7 +222,8 @@ export const useStorage = () => {
           user_id: user.id,
           monthly_target: updatedSettings.monthlyTarget,
           yearly_target: updatedSettings.yearlyTarget,
-          field_service_days: updatedSettings.fieldServiceDays,
+          field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format
+          field_service_days_config: JSON.stringify(updatedSettings.fieldServiceDays),
           service_year_start: updatedSettings.serviceYearStart
         }, {
           onConflict: 'user_id'

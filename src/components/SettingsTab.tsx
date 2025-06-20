@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X } from 'lucide-react';
-import { Settings, Profile } from '../types';
+import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X, Plus, Trash2 } from 'lucide-react';
+import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 
 interface SettingsTabProps {
@@ -119,7 +119,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             {/* Avatar */}
             <div className="text-center">
               <div className="relative inline-block">
-                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                   {localProfile.avatar_url ? (
                     <img
                       src={localProfile.avatar_url}
@@ -274,12 +274,33 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const toggleFieldServiceDay = (day: number) => {
-    const newDays = localSettings.fieldServiceDays.includes(day)
-      ? localSettings.fieldServiceDays.filter(d => d !== day)
-      : [...localSettings.fieldServiceDays, day].sort();
-    
-    setLocalSettings(prev => ({ ...prev, fieldServiceDays: newDays }));
+  const addFieldServiceDay = () => {
+    const newDay: FieldServiceDay = {
+      day: 0,
+      type: 'h2h_rv',
+      potentialHours: 2,
+      label: 'New Field Service Day'
+    };
+    setLocalSettings(prev => ({
+      ...prev,
+      fieldServiceDays: [...prev.fieldServiceDays, newDay]
+    }));
+  };
+
+  const updateFieldServiceDay = (index: number, updates: Partial<FieldServiceDay>) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      fieldServiceDays: prev.fieldServiceDays.map((day, i) => 
+        i === index ? { ...day, ...updates } : day
+      )
+    }));
+  };
+
+  const removeFieldServiceDay = (index: number) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      fieldServiceDays: prev.fieldServiceDays.filter((_, i) => i !== index)
+    }));
   };
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -411,25 +432,91 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
       {/* Field Service Days */}
       <div className="bg-white rounded-xl p-6">
-        <div className="flex items-center space-x-3 mb-4">
-          <Calendar size={24} className="text-purple-500" />
-          <h3 className="text-lg font-semibold text-gray-800">Field Service Days</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <Calendar size={24} className="text-purple-500" />
+            <h3 className="text-lg font-semibold text-gray-800">Field Service Days</h3>
+          </div>
+          <button
+            onClick={addFieldServiceDay}
+            className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-600 px-3 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={16} />
+            <span className="text-sm font-medium">Add Day</span>
+          </button>
         </div>
         
-        <p className="text-sm text-gray-600 mb-4">Select the days of the week when you typically go in field service:</p>
+        <p className="text-sm text-gray-600 mb-4">
+          Configure your typical field service days with expected hours for better scheduling suggestions:
+        </p>
         
-        <div className="space-y-2">
-          {dayNames.map((day, index) => (
-            <label key={index} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={localSettings.fieldServiceDays.includes(index)}
-                onChange={() => toggleFieldServiceDay(index)}
-                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <span className="text-gray-700">{day}</span>
-            </label>
+        <div className="space-y-4">
+          {localSettings.fieldServiceDays.map((fieldDay, index) => (
+            <div key={index} className="bg-gray-50 rounded-xl p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
+                  <select
+                    value={fieldDay.day}
+                    onChange={(e) => updateFieldServiceDay(index, { 
+                      day: parseInt(e.target.value),
+                      label: `${dayNames[parseInt(e.target.value)]} - ${fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
+                    })}
+                    className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    {dayNames.map((day, dayIndex) => (
+                      <option key={dayIndex} value={dayIndex}>{day}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                  <select
+                    value={fieldDay.type}
+                    onChange={(e) => updateFieldServiceDay(index, { 
+                      type: e.target.value as 'h2h_rv' | 'cart',
+                      label: `${dayNames[fieldDay.day]} - ${e.target.value === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
+                    })}
+                    className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="h2h_rv">House to House / Return Visits</option>
+                    <option value="cart">Cart Ministry</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Potential Hours</label>
+                  <input
+                    type="number"
+                    min="0.5"
+                    max="12"
+                    step="0.5"
+                    value={fieldDay.potentialHours}
+                    onChange={(e) => updateFieldServiceDay(index, { potentialHours: parseFloat(e.target.value) || 1 })}
+                    className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                
+                <div className="flex items-end">
+                  <button
+                    onClick={() => removeFieldServiceDay(index)}
+                    className="w-full p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
           ))}
+          
+          {localSettings.fieldServiceDays.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+              <p>No field service days configured</p>
+              <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
+            </div>
+          )}
         </div>
       </div>
 

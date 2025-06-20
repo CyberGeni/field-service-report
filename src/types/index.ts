@@ -7,10 +7,17 @@ export interface ServiceRecord {
   notes?: string;
 }
 
+export interface FieldServiceDay {
+  day: number; // 0-6 (Sunday-Saturday)
+  type: 'h2h_rv' | 'cart';
+  potentialHours: number;
+  label: string;
+}
+
 export interface Settings {
   monthlyTarget: number;
   yearlyTarget: number;
-  fieldServiceDays: number[]; // 0-6 (Sunday-Saturday)
+  fieldServiceDays: FieldServiceDay[];
   username: string;
   password: string;
   serviceYearStart: string; // YYYY-MM format
@@ -39,6 +46,8 @@ export interface MonthlyStats {
   deficit: number;
   surplus: number;
   recordsCount: number;
+  isOnTrack: boolean;
+  expectedHoursByNow: number;
 }
 
 export interface YearlyStats {
@@ -47,4 +56,12 @@ export interface YearlyStats {
   monthsRemaining: number;
   hoursPerMonthNeeded: number;
   isOnTrack: boolean;
+}
+
+export interface FieldServiceSuggestion {
+  date: string;
+  dayName: string;
+  type: 'h2h_rv' | 'cart';
+  potentialHours: number;
+  priority: 'high' | 'medium' | 'low';
 }

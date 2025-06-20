@@ -1,4 +1,4 @@
-import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile } from '../types';
+import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServiceSuggestion } from '../types';
 import { getCurrentMonth, getTotalMinutes } from './dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 
@@ -22,15 +22,31 @@ export const calculateMonthlyStats = (
     ? getServiceTypeTargets(profile.service_type).monthlyTarget
     : settings.monthlyTarget;
   
-  const deficit = Math.max(0, targetHours - totalHours);
-  const surplus = Math.max(0, totalHours - targetHours);
+  // Calculate expected hours by now (dynamic tracking)
+  const currentDate = new Date();
+  const [year, monthNum] = month.split('-').map(Number);
+  const monthStart = new Date(year, monthNum - 1, 1);
+  const monthEnd = new Date(year, monthNum, 0);
+  const daysInMonth = monthEnd.getDate();
+  const currentDay = currentDate.getMonth() === monthNum - 1 && currentDate.getFullYear() === year 
+    ? Math.min(currentDate.getDate(), daysInMonth)
+    : daysInMonth;
+  
+  const progressThroughMonth = currentDay / daysInMonth;
+  const expectedHoursByNow = targetHours * progressThroughMonth;
+  
+  const isOnTrack = totalHours >= expectedHoursByNow;
+  const deficit = Math.max(0, expectedHoursByNow - totalHours);
+  const surplus = Math.max(0, totalHours - expectedHoursByNow);
   
   return {
     totalHours,
     targetHours,
     deficit,
     surplus,
-    recordsCount: monthRecords.length
+    recordsCount: monthRecords.length,
+    isOnTrack,
+    expectedHoursByNow
   };
 };
 
@@ -76,6 +92,67 @@ export const calculateYearlyStats = (
     hoursPerMonthNeeded,
     isOnTrack
   };
+};
+
+export const generateFieldServiceSuggestions = (
+  records: ServiceRecord[],
+  settings: Settings,
+  month: string
+): FieldServiceSuggestion[] => {
+  const monthlyStats = calculateMonthlyStats(records, settings, month);
+  const hoursNeeded = Math.max(0, monthlyStats.targetHours - monthlyStats.totalHours);
+  
+  if (hoursNeeded <= 0) {
+    return []; // Already met target
+  }
+  
+  const currentDate = new Date();
+  const [year, monthNum] = month.split('-').map(Number);
+  const monthEnd = new Date(year, monthNum, 0);
+  const daysInMonth = monthEnd.getDate();
+  
+  const suggestions: FieldServiceSuggestion[] = [];
+  const recordedDates = new Set(records.filter(r => r.date.startsWith(month)).map(r => r.date));
+  
+  // Generate suggestions for remaining days in the month
+  for (let day = currentDate.getDate(); day <= daysInMonth; day++) {
+    const date = new Date(year, monthNum - 1, day);
+    const dateString = date.toISOString().split('T')[0];
+    
+    // Skip if already recorded
+    if (recordedDates.has(dateString)) continue;
+    
+    // Check if this day matches any of the configured field service days
+    const fieldServiceDay = settings.fieldServiceDays.find(fsd => fsd.day === date.getDay());
+    if (!fieldServiceDay) continue;
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    
+    // Determine priority based on hours needed and potential hours
+    let priority: 'high' | 'medium' | 'low' = 'low';
+    if (hoursNeeded >= fieldServiceDay.potentialHours * 0.8) {
+      priority = 'high';
+    } else if (hoursNeeded >= fieldServiceDay.potentialHours * 0.4) {
+      priority = 'medium';
+    }
+    
+    suggestions.push({
+      date: dateString,
+      dayName: dayNames[date.getDay()],
+      type: fieldServiceDay.type,
+      potentialHours: fieldServiceDay.potentialHours,
+      priority
+    });
+  }
+  
+  // Sort by priority and potential hours
+  return suggestions.sort((a, b) => {
+    const priorityOrder = { high: 3, medium: 2, low: 1 };
+    if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+      return priorityOrder[b.priority] - priorityOrder[a.priority];
+    }
+    return b.potentialHours - a.potentialHours;
+  }).slice(0, 10); // Limit to top 10 suggestions
 };
 
 export const getProgressPercentage = (current: number, target: number): number => {

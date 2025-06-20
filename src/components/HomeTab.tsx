@@ -1,7 +1,7 @@
 import React from 'react';
-import { Clock, Target, TrendingUp, TrendingDown, User } from 'lucide-react';
+import { Clock, Target, TrendingUp, TrendingDown, User, Calendar, MapPin, Car, ShoppingCart } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
-import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor } from '../utils/calculations';
+import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor, generateFieldServiceSuggestions } from '../utils/calculations';
 import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort } from '../utils/dateUtils';
 import { getServiceTypeTargets, getServiceTypeLabel, hasHourRequirement } from '../utils/serviceTypes';
 import CircularProgress from './CircularProgress';
@@ -16,6 +16,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
   const currentMonth = getCurrentMonth();
   const monthlyStats = calculateMonthlyStats(records, settings, currentMonth, profile);
   const yearlyStats = calculateYearlyStats(records, settings, profile);
+  const suggestions = generateFieldServiceSuggestions(records, settings, currentMonth);
   
   const monthProgress = getProgressPercentage(monthlyStats.totalHours, monthlyStats.targetHours);
   const yearProgress = getProgressPercentage(yearlyStats.totalHours, yearlyStats.targetHours);
@@ -75,13 +76,13 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     
     const targetText = `Target for ${monthName}: ${Math.round(monthlyStats.targetHours)}h `;
     
-    if (monthlyStats.deficit > 0) {
+    if (!monthlyStats.isOnTrack && monthlyStats.deficit > 0) {
       return (
         <div className="text-center">
           <span>
             {targetText}
             <span className="text-red-600 font-semibold">
-              ({formatHoursMinutesShort(monthlyStats.deficit)} behind)
+              ({formatHoursMinutesShort(monthlyStats.deficit)} behind pace)
             </span>
           </span>
           <p className="text-xs text-gray-500 mt-1">
@@ -89,13 +90,13 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           </p>
         </div>
       );
-    } else if (monthlyStats.surplus > 0) {
+    } else if (monthlyStats.isOnTrack && monthlyStats.surplus > 0) {
       return (
         <div className="text-center">
           <span>
             {targetText}
             <span className="text-green-600 font-semibold">
-              ({formatHoursMinutesShort(monthlyStats.surplus)} ahead)
+              ({formatHoursMinutesShort(monthlyStats.surplus)} ahead of pace)
             </span>
           </span>
           <p className="text-xs text-gray-500 mt-1">
@@ -109,8 +110,8 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
       <div className="text-center">
         <span>
           {targetText}
-          <span className="text-gray-600 font-semibold">
-            (on target)
+          <span className="text-blue-600 font-semibold">
+            (on track)
           </span>
         </span>
         <p className="text-xs text-gray-500 mt-1">
@@ -120,13 +121,27 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     );
   };
 
+  const getServiceTypeIcon = (type: string) => {
+    switch (type) {
+      case 'h2h_rv': return <MapPin size={16} className="text-blue-600" />;
+      case 'cart': return <ShoppingCart size={16} className="text-purple-600" />;
+      default: return <Calendar size={16} className="text-gray-600" />;
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'bg-red-50 border-red-200 text-red-800';
+      case 'medium': return 'bg-yellow-50 border-yellow-200 text-yellow-800';
+      case 'low': return 'bg-green-50 border-green-200 text-green-800';
+      default: return 'bg-gray-50 border-gray-200 text-gray-800';
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Profile Header */}
       <div className="text-center py-6">
-        {/* Avatar and Service Type */}
-        
-        
         <h1 className="text-3xl font-bold text-gray-800 mb-4 font-libre-franklin">
           Good {timeOfDay}, {displayName}!
         </h1>
@@ -161,11 +176,61 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
         </div>
       </div>
 
+      {/* Field Service Suggestions */}
+      {suggestions.length > 0 && (
+        <div className="bg-white rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <Calendar size={24} className="text-blue-500" />
+            <h3 className="text-lg font-semibold text-gray-800">Suggested Field Service Days</h3>
+          </div>
+          
+          <div className="space-y-3">
+            {suggestions.slice(0, 5).map((suggestion, index) => (
+              <div
+                key={suggestion.date}
+                className={`p-3 rounded-lg border ${getPriorityColor(suggestion.priority)}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    {getServiceTypeIcon(suggestion.type)}
+                    <div>
+                      <p className="font-medium">
+                        {suggestion.dayName} - {new Date(suggestion.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </p>
+                      <p className="text-sm opacity-75">
+                        {suggestion.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Ministry'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold">{suggestion.potentialHours}h</p>
+                    <p className="text-xs opacity-75 capitalize">{suggestion.priority} priority</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          {suggestions.length > 5 && (
+            <p className="text-sm text-gray-500 mt-3 text-center">
+              +{suggestions.length - 5} more suggestions available
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Yearly Progress */}
       <div className="bg-white rounded-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-800">Service Year Progress</h3>
-          
+          {profile?.service_type && (
+            <span className="text-xs text-blue-600 font-medium">
+              {hasHourRequirement(profile.service_type) 
+                ? `${getServiceTypeLabel(profile.service_type)} Requirement`
+                : 'Personal Goal'
+              }
+            </span>
+          )}
         </div>
         
         <div className="space-y-4">
