@@ -85,16 +85,11 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
         
         {hasRecords && (
           <div className="absolute top-6 left-1 right-1 bottom-1">
-            <div className={`${getServiceTypeColor(dayRecords)} rounded p-1 text-white text-xs h-full flex flex-col justify-center`}>
+            <div className={`${getServiceTypeColor(dayRecords)} rounded p-1 text-white text-xs h-full flex items-center justify-center`}>
               <div className="text-center">
                 <div className="font-semibold text-sm">
                   {totalTime.hours}:{totalTime.minutes.toString().padStart(2, '0')}
                 </div>
-                {dayRecords.length > 1 && (
-                  <div className="text-xs opacity-75 mt-1">
-                    {dayRecords.length} entries
-                  </div>
-                )}
               </div>
             </div>
           </div>
