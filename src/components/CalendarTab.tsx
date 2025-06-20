@@ -320,7 +320,18 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
     return 'bg-gray-500';
   };
 
+  const isFutureDate = (day: number): boolean => {
+    const today = new Date();
+    const dayDate = new Date(year, month, day);
+    return dayDate > today;
+  };
+
   const handleDayClick = (day: number) => {
+    // Prevent clicking on future dates
+    if (isFutureDate(day)) {
+      return;
+    }
+
     const dateString = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     setSelectedDate(dateString);
     setShowEntryModal(true);
@@ -333,17 +344,24 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
     const totalTime = getTotalTimeForDate(day);
     const hasRecords = dayRecords.length > 0;
     const isToday = new Date().toDateString() === date.toDateString();
+    const isFuture = isFutureDate(day);
 
     return (
       <button
         key={day}
         onClick={() => handleDayClick(day)}
-        className={`relative h-20 p-1 w-full text-left transition-colors hover:bg-gray-100 flex flex-col ${
-          isToday ? 'bg-blue-50' : 'bg-white'
+        disabled={isFuture}
+        className={`relative h-20 p-1 w-full text-left transition-colors flex flex-col ${
+          isFuture 
+            ? 'bg-gray-100 cursor-not-allowed opacity-50' 
+            : isToday 
+              ? 'bg-blue-50 hover:bg-blue-100' 
+              : 'bg-white hover:bg-gray-100'
         }`}
       >
         {/* Date number at the top */}
         <div className={`text-sm font-medium mb-1 ${
+          isFuture ? 'text-gray-400' :
           isToday ? 'text-blue-600' : 
           isFieldDay ? 'text-gray-800' : 'text-gray-400'
         }`}>
@@ -351,7 +369,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
         </div>
         
         {/* Field service day indicator */}
-        {isFieldDay && !hasRecords && (
+        {isFieldDay && !hasRecords && !isFuture && (
           <div className="w-2 h-2 bg-gray-300 rounded-full mb-1" />
         )}
         
@@ -368,14 +386,16 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
           </div>
         )}
         
-        {/* Add icon for clickable indication */}
-        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          {hasRecords ? (
-            <Edit size={12} className="text-gray-400" />
-          ) : (
-            <Plus size={12} className="text-gray-400" />
-          )}
-        </div>
+        {/* Add icon for clickable indication - only for non-future dates */}
+        {!isFuture && (
+          <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {hasRecords ? (
+              <Edit size={12} className="text-gray-400" />
+            ) : (
+              <Plus size={12} className="text-gray-400" />
+            )}
+          </div>
+        )}
       </button>
     );
   };
@@ -419,7 +439,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <p className="text-blue-800 text-sm font-medium">
-          💡 Click on any day to add or edit your service time. Multiple entries for the same day and service type will be automatically merged.
+          💡 Click on any past or current day to add or edit your service time. Future dates are disabled. Multiple entries for the same day and service type will be automatically merged.
         </p>
       </div>
 
