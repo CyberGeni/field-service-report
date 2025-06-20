@@ -468,7 +468,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <p className="text-blue-800 text-sm font-medium">
-          💡 Click on any past or current day to record time. Switch between service types using the tabs. Enter 0 hours and 0 minutes to delete a record. Future dates are disabled.
+          💡 Click on any past or current day to record time. Switch between service types using the tabs.
         </p>
       </div>
 
