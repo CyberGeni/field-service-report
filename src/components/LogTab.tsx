@@ -156,23 +156,34 @@ const LogTab: React.FC<LogTabProps> = ({
 
       {/* Service Type Selection */}
       <div className="bg-white rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Service Type</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <h3 className="text-lg font-semibold text-gray-800 mb-6">Service Type</h3>
+        <div className="space-y-4">
           {[
-            { id: 'h2h', label: 'House to House / Return Visits', icon: Briefcase },
-            { id: 'cart', label: 'Cart Witnessing', icon: BaggageClaim }
-          ].map(({ id, label, icon: Icon }) => (
+            { id: 'h2h', label: 'House to House / Return Visits', icon: Briefcase, description: 'Door-to-door ministry and follow-up visits' },
+            { id: 'cart', label: 'Cart Witnessing', icon: BaggageClaim, description: 'Public witnessing with literature cart' }
+          ].map(({ id, label, icon: Icon, description }) => (
             <button
               key={id}
               onClick={() => setSelectedType(id as 'h2h' | 'rv' | 'cart')}
-              className={`p-3 rounded-xl transition-all duration-200 ${
+              className={`w-full p-4 rounded-xl transition-all duration-200 border-2 ${
                 selectedType === id || (selectedType === 'rv' && id === 'h2h')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
               }`}
             >
-              <Icon size={24} className="mx-auto mb-2" />
-              <div className="text-sm font-medium">{label}</div>
+              <div className="flex items-center space-x-4">
+                <div className={`p-3 rounded-lg ${
+                  selectedType === id || (selectedType === 'rv' && id === 'h2h')
+                    ? 'bg-blue-100'
+                    : 'bg-white'
+                }`}>
+                  <Icon size={24} />
+                </div>
+                <div className="text-left flex-1">
+                  <div className="font-semibold text-base">{label}</div>
+                  <div className="text-sm opacity-75 mt-1">{description}</div>
+                </div>
+              </div>
             </button>
           ))}
         </div>
