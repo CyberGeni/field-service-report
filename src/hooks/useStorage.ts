@@ -145,76 +145,6 @@ export const useStorage = () => {
     }
   };
 
-  const mergeRecordsForDate = async (date: string, newRecord: ServiceRecord) => {
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
-
-    // Get all existing records for this date and service type
-    const { data: existingRecords, error: fetchError } = await supabase
-      .from('service_records')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', date)
-      .eq('type', newRecord.type);
-
-    if (fetchError) throw fetchError;
-
-    // Calculate total time including the new record
-    let totalMinutes = newRecord.hours * 60 + newRecord.minutes;
-    let combinedNotes = newRecord.notes ? [newRecord.notes] : [];
-
-    // Add existing records' time and notes
-    existingRecords?.forEach(record => {
-      totalMinutes += record.hours * 60 + record.minutes;
-      if (record.notes && record.notes.trim()) {
-        combinedNotes.push(record.notes.trim());
-      }
-    });
-
-    const finalHours = Math.floor(totalMinutes / 60);
-    const finalMinutes = totalMinutes % 60;
-    const finalNotes = combinedNotes.length > 0 ? combinedNotes.join('; ') : undefined;
-
-    // Delete all existing records for this date and type
-    if (existingRecords && existingRecords.length > 0) {
-      const { error: deleteError } = await supabase
-        .from('service_records')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('date', date)
-        .eq('type', newRecord.type);
-
-      if (deleteError) throw deleteError;
-    }
-
-    // Insert the merged record
-    const mergedRecord = {
-      id: newRecord.id,
-      user_id: user.id,
-      date: date,
-      hours: finalHours,
-      minutes: finalMinutes,
-      type: newRecord.type,
-      notes: finalNotes || null
-    };
-
-    const { error: insertError } = await supabase
-      .from('service_records')
-      .insert(mergedRecord);
-
-    if (insertError) throw insertError;
-
-    return {
-      id: newRecord.id,
-      date: date,
-      hours: finalHours,
-      minutes: finalMinutes,
-      type: newRecord.type,
-      notes: finalNotes
-    };
-  };
-
   const saveRecord = async (record: ServiceRecord) => {
     if (!user) {
       setError('User not authenticated');
@@ -224,38 +154,61 @@ export const useStorage = () => {
     try {
       setError(null);
 
-      // Check if this is an update to an existing record
-      const existingRecord = records.find(r => r.id === record.id);
+      // Check if a record already exists for this date and type
+      const existingRecord = records.find(r => r.date === record.date && r.type === record.type);
       
       if (existingRecord) {
-        // This is an edit - replace the existing record
+        // Update existing record
         const { error } = await supabase
           .from('service_records')
           .update({
+            hours: record.hours,
+            minutes: record.minutes,
+            notes: record.notes || null
+          })
+          .eq('id', existingRecord.id)
+          .eq('user_id', user.id);
+
+        if (error) throw error;
+
+        // Update local state
+        const updatedRecords = records.map(r => 
+          r.id === existingRecord.id 
+            ? { ...record, id: existingRecord.id }
+            : r
+        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        setRecords(updatedRecords);
+      } else {
+        // Create new record
+        const { data, error } = await supabase
+          .from('service_records')
+          .insert({
+            id: record.id,
+            user_id: user.id,
             date: record.date,
             hours: record.hours,
             minutes: record.minutes,
             type: record.type,
             notes: record.notes || null
           })
-          .eq('id', record.id)
-          .eq('user_id', user.id);
+          .select()
+          .single();
 
         if (error) throw error;
 
         // Update local state
-        const updatedRecords = records.map(r => r.id === record.id ? record : r)
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setRecords(updatedRecords);
-      } else {
-        // This is a new record - merge with existing records for the same date and type
-        const mergedRecord = await mergeRecordsForDate(record.date, record);
+        const newRecord = {
+          id: data.id,
+          date: data.date,
+          hours: data.hours,
+          minutes: data.minutes,
+          type: data.type as 'h2h' | 'cart',
+          notes: data.notes || undefined
+        };
 
-        // Update local state - remove any existing records for this date/type and add the merged one
-        const updatedRecords = [
-          ...records.filter(r => !(r.date === record.date && r.type === record.type)),
-          mergedRecord
-        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        const updatedRecords = [...records, newRecord]
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         setRecords(updatedRecords);
       }
