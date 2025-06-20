@@ -41,11 +41,15 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     }, 0);
   };
 
-  const getServiceTypeColor = (totalHours: number): string => {
-    if (totalHours >= 4) return 'bg-green-500';
-    if (totalHours >= 2) return 'bg-blue-500';
-    if (totalHours >= 1) return 'bg-yellow-500';
-    return 'bg-purple-500';
+  const getServiceTypeColor = (records: ServiceRecord[]): string => {
+    // Determine color based on service types present
+    const hasH2H = records.some(r => r.type === 'h2h');
+    const hasCart = records.some(r => r.type === 'cart');
+    
+    if (hasH2H && hasCart) return 'bg-gradient-to-r from-blue-500 to-purple-500';
+    if (hasH2H) return 'bg-blue-500';
+    if (hasCart) return 'bg-purple-500';
+    return 'bg-gray-500';
   };
 
   const renderCalendarDay = (day: number) => {
@@ -76,7 +80,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
         
         {hasRecords && (
           <div className="absolute top-6 left-1 right-1 bottom-1">
-            <div className={`${getServiceTypeColor(totalHours)} rounded p-1 text-white text-xs h-full flex flex-col justify-center`}>
+            <div className={`${getServiceTypeColor(dayRecords)} rounded p-1 text-white text-xs h-full flex flex-col justify-center`}>
               <div className="text-center">
                 <div className="font-semibold text-sm">
                   {Math.floor(totalHours)}h {Math.round((totalHours % 1) * 60)}m
@@ -103,7 +107,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     .reduce((total, record) => total + record.hours + record.minutes / 60, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-6">
       {/* Header */}
       <div className="flex items-center justify-between bg-white rounded-xl p-6">
         <button
@@ -133,20 +137,16 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
         <h3 className="text-sm font-semibold text-gray-800 mb-3">Legend</h3>
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-green-500 rounded"></div>
-            <span>4+ hours</span>
-          </div>
-          <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-blue-500 rounded"></div>
-            <span>2-4 hours</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-            <span>1-2 hours</span>
+            <span>House to House</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-purple-500 rounded"></div>
-            <span>Under 1 hour</span>
+            <span>Cart Witnessing</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded"></div>
+            <span>Mixed Types</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
