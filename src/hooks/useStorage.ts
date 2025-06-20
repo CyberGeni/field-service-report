@@ -7,7 +7,7 @@ const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
   yearlyTarget: 120,
   fieldServiceDays: [
-    { day: 6, type: 'h2h_rv', potentialHours: 5, label: 'Saturday - House to House/Return Visits' },
+    { day: 6, type: 'h2h_rv', potentialHours: 4, label: 'Saturday - House to House/Return Visits' },
     { day: 0, type: 'h2h_rv', potentialHours: 3, label: 'Sunday - House to House/Return Visits' }
   ],
   username: '',
@@ -80,9 +80,12 @@ export const useStorage = () => {
         // Try to use the new field_service_days_config column first
         if (settingsData.field_service_days_config) {
           try {
-            fieldServiceDays = settingsData.field_service_days_config;
+            fieldServiceDays = Array.isArray(settingsData.field_service_days_config) 
+              ? settingsData.field_service_days_config 
+              : DEFAULT_SETTINGS.fieldServiceDays;
           } catch (e) {
             console.warn('Failed to parse field_service_days_config, using default');
+            fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
           }
         }
         // Fallback to legacy field_service_days if config is not available
@@ -241,16 +244,22 @@ export const useStorage = () => {
         service_year_start: updatedSettings.serviceYearStart
       };
 
+      console.log('Updating settings with data:', updateData);
+
       const { error } = await supabase
         .from('user_settings')
         .upsert(updateData, {
           onConflict: 'user_id'
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
 
-      // Update local state
+      // Update local state only after successful database update
       setSettings(updatedSettings);
+      console.log('Settings updated successfully:', updatedSettings);
 
     } catch (err: any) {
       console.error('Error updating settings:', err);
