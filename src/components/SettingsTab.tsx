@@ -1,0 +1,340 @@
+import React, { useState } from 'react';
+import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit } from 'lucide-react';
+import { Settings, Profile } from '../types';
+
+interface SettingsTabProps {
+  settings: Settings;
+  profile?: Profile | null;
+  onUpdateSettings: (settings: Partial<Settings>) => void;
+  onUpdateProfile?: (updates: Partial<Profile>) => Promise<void>;
+  onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
+  onSignOut: () => Promise<{ error: any }>;
+}
+
+const SettingsTab: React.FC<SettingsTabProps> = ({ 
+  settings, 
+  profile,
+  onUpdateSettings, 
+  onUpdateProfile,
+  onUploadAvatar,
+  onSignOut 
+}) => {
+  const [localSettings, setLocalSettings] = useState(settings);
+  const [localProfile, setLocalProfile] = useState(profile);
+  const [showPassword, setShowPassword] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      onUpdateSettings(localSettings);
+      
+      if (onUpdateProfile && localProfile && profile) {
+        await onUpdateProfile({
+          name: localProfile.name,
+          service_type: localProfile.service_type
+        });
+      }
+    } catch (error) {
+      console.error('Save error:', error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await onSignOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUploadAvatar || !onUpdateProfile) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const { data: avatarUrl, error } = await onUploadAvatar(file);
+      
+      if (error) {
+        alert('Failed to upload avatar: ' + error.message);
+        return;
+      }
+
+      if (avatarUrl) {
+        await onUpdateProfile({ avatar_url: avatarUrl });
+        setLocalProfile(prev => prev ? { ...prev, avatar_url: avatarUrl } : prev);
+      }
+    } catch (error) {
+      console.error('Avatar upload error:', error);
+      alert('Failed to upload avatar');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const toggleFieldServiceDay = (day: number) => {
+    const newDays = localSettings.fieldServiceDays.includes(day)
+      ? localSettings.fieldServiceDays.filter(d => d !== day)
+      : [...localSettings.fieldServiceDays, day].sort();
+    
+    setLocalSettings(prev => ({ ...prev, fieldServiceDays: newDays }));
+  };
+
+  const handleServiceTypeChange = (serviceType: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer') => {
+    // Update profile
+    setLocalProfile(prev => prev ? { ...prev, service_type: serviceType } : prev);
+    
+    // Update default targets based on service type
+    const defaultTargets = getDefaultTargets(serviceType);
+    setLocalSettings(prev => ({
+      ...prev,
+      monthlyTarget: defaultTargets.monthlyTarget,
+      yearlyTarget: defaultTargets.yearlyTarget
+    }));
+  };
+
+  const getDefaultTargets = (serviceType: string) => {
+    switch (serviceType) {
+      case 'auxiliary_pioneer':
+        return { monthlyTarget: 30, yearlyTarget: 360 };
+      case 'regular_pioneer':
+        return { monthlyTarget: 50, yearlyTarget: 600 };
+      default:
+        return { monthlyTarget: 10, yearlyTarget: 120 };
+    }
+  };
+
+  const getServiceTypeLabel = (type: string) => {
+    switch (type) {
+      case 'auxiliary_pioneer':
+        return 'Auxiliary Pioneer';
+      case 'regular_pioneer':
+        return 'Regular Pioneer';
+      default:
+        return 'Publisher';
+    }
+  };
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  return (
+    <div className="space-y-6">
+      {/* Profile Section */}
+      {profile && (
+        <div className="bg-white rounded-xl p-6">
+          <div className="flex items-center space-x-3 mb-4">
+            <User size={24} className="text-blue-500" />
+            <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
+          </div>
+          
+          <div className="space-y-4">
+            {/* Avatar */}
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                  {localProfile?.avatar_url ? (
+                    <img
+                      src={localProfile.avatar_url}
+                      alt={localProfile.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User size={24} className="text-gray-400" />
+                  )}
+                </div>
+                {onUploadAvatar && (
+                  <label className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white p-1 rounded-full cursor-pointer transition-colors">
+                    <Camera size={12} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                )}
+              </div>
+              <div>
+                <p className="font-medium text-gray-800">{localProfile?.name}</p>
+                <p className="text-sm text-gray-600">
+                  {getServiceTypeLabel(localProfile?.service_type || 'publisher')}
+                </p>
+              </div>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Name</label>
+              <input
+                type="text"
+                value={localProfile?.name || ''}
+                onChange={(e) => setLocalProfile(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                placeholder="Enter your name"
+              />
+            </div>
+
+            {/* Service Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
+              <div className="space-y-2">
+                {[
+                  { value: 'publisher', label: 'Publisher' },
+                  { value: 'auxiliary_pioneer', label: 'Auxiliary Pioneer' },
+                  { value: 'regular_pioneer', label: 'Regular Pioneer' }
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`block p-3 rounded-xl border cursor-pointer transition-all ${
+                      localProfile?.service_type === option.value
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="radio"
+                        name="serviceType"
+                        value={option.value}
+                        checked={localProfile?.service_type === option.value}
+                        onChange={(e) => handleServiceTypeChange(e.target.value as any)}
+                        className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                      />
+                      <span className="font-medium text-gray-800">{option.label}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hour Requirements */}
+      <div className="bg-white rounded-xl p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Target size={24} className="text-green-500" />
+          <h3 className="text-lg font-semibold text-gray-800">Hour Requirements</h3>
+        </div>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Target (hours)</label>
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={localSettings.monthlyTarget}
+              onChange={(e) => setLocalSettings(prev => ({ ...prev, monthlyTarget: parseInt(e.target.value) || 10 }))}
+              className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Yearly Target (hours)</label>
+            <input
+              type="number"
+              min="12"
+              max="1000"
+              value={localSettings.yearlyTarget}
+              onChange={(e) => setLocalSettings(prev => ({ ...prev, yearlyTarget: parseInt(e.target.value) || 120 }))}
+              className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Service Year Start</label>
+            <input
+              type="month"
+              value={localSettings.serviceYearStart}
+              onChange={(e) => setLocalSettings(prev => ({ ...prev, serviceYearStart: e.target.value }))}
+              className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Field Service Days */}
+      <div className="bg-white rounded-xl p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <Calendar size={24} className="text-purple-500" />
+          <h3 className="text-lg font-semibold text-gray-800">Field Service Days</h3>
+        </div>
+        
+        <p className="text-sm text-gray-600 mb-4">Select the days of the week when you typically go in field service:</p>
+        
+        <div className="space-y-2">
+          {dayNames.map((day, index) => (
+            <label key={index} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={localSettings.fieldServiceDays.includes(index)}
+                onChange={() => toggleFieldServiceDay(index)}
+                className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <span className="text-gray-700">{day}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="space-y-4">
+        {/* Save Button */}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-4 px-6 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
+        >
+          {saving ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <Save size={20} />
+              <span>Save Settings</span>
+            </>
+          )}
+        </button>
+
+        {/* Sign Out Button */}
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-4 px-6 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
+        >
+          {signingOut ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <LogOut size={20} />
+              <span>Sign Out</span>
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export default SettingsTab;
