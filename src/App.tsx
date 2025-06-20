@@ -22,7 +22,7 @@ type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [authView, setAuthView] = useState<AuthView>('splash');
-  const { records, settings, loading: storageLoading, saveRecord, updateSettings } = useStorage();
+  const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings } = useStorage();
   const { timerState, startTimer, pauseTimer, stopTimer } = useTimer();
   const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
   const { profile, loading: profileLoading, createProfile, updateProfile, uploadAvatar, getDefaultTargets } = useProfile(user);
@@ -147,7 +147,7 @@ function App() {
       case 'home':
         return <HomeTab records={records} settings={settings} profile={profile} />;
       case 'calendar':
-        return <CalendarTab records={records} settings={settings} />;
+        return <CalendarTab records={records} settings={settings} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
       case 'students':
         return <StudentsTab />;
       case 'settings':
