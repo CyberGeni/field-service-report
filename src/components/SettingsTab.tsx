@@ -647,7 +647,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </button>
           </div>
           
-          <div className="flex items-center space-x-4 mb-4">
+          <div className="flex items-center space-x-4">
             <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
               {profile.avatar_url ? (
                 <img
@@ -669,24 +669,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 </span>
               </p>
             </div>
-          </div>
-
-          {/* Sign Out Button in Profile Section */}
-          <div className="pt-4 border-t border-gray-100">
-            <button
-              onClick={handleSignOut}
-              disabled={signingOut}
-              className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-3 px-4 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
-            >
-              {signingOut ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <LogOut size={20} />
-                  <span>Sign Out</span>
-                </>
-              )}
-            </button>
           </div>
         </div>
       )}
@@ -820,6 +802,35 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
           </div>
         )}
+      </div>
+
+      {/* Sign Out Section - Moved to bottom */}
+      <div className="bg-white rounded-xl p-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <LogOut size={24} className="text-red-500" />
+          <h3 className="text-lg font-semibold text-gray-800">Account</h3>
+        </div>
+        
+        <div className="space-y-3">
+          <p className="text-gray-600 text-sm">
+            Sign out of your account to switch users or for security purposes.
+          </p>
+          
+          <button
+            onClick={handleSignOut}
+            disabled={signingOut}
+            className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-3 px-4 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
+          >
+            {signingOut ? (
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <LogOut size={20} />
+                <span>Sign Out</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Edit Profile Modal */}
