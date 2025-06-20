@@ -540,7 +540,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </button>
           </div>
           
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 mb-4">
             <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
               {profile.avatar_url ? (
                 <img
@@ -562,6 +562,24 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 </span>
               </p>
             </div>
+          </div>
+
+          {/* Sign Out Button in Profile Section */}
+          <div className="pt-4 border-t border-gray-100">
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-3 px-4 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
+            >
+              {signingOut ? (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <LogOut size={20} />
+                  <span>Sign Out</span>
+                </>
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -685,9 +703,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         )}
       </div>
 
-      {/* Action Buttons */}
+      {/* Save Settings Button */}
       <div className="space-y-4">
-        {/* Save Button */}
         <button
           onClick={handleSave}
           disabled={saving}
@@ -699,22 +716,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <>
               <Save size={20} />
               <span>Save Settings</span>
-            </>
-          )}
-        </button>
-
-        {/* Sign Out Button */}
-        <button
-          onClick={handleSignOut}
-          disabled={signingOut}
-          className="w-full bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-4 px-6 rounded-xl font-medium transition-colors duration-200 flex items-center justify-center space-x-2"
-        >
-          {signingOut ? (
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          ) : (
-            <>
-              <LogOut size={20} />
-              <span>Sign Out</span>
             </>
           )}
         </button>
