@@ -38,7 +38,7 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
 }) => {
   const [localDay, setLocalDay] = useState<FieldServiceDay>({
     day: 0,
-    type: 'h2h_rv',
+    type: 'h2h',
     potentialHours: 2,
     label: 'Sunday - House to House/Return Visits'
   });
@@ -60,7 +60,7 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
         
         setLocalDay({
           day: firstAvailableDay,
-          type: 'h2h_rv',
+          type: 'h2h',
           potentialHours: 2,
           label: `${dayNames[firstAvailableDay]} - House to House/Return Visits`
         });
@@ -101,7 +101,7 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
     // Update label
     const updatedDay = {
       ...localDay,
-      label: `${dayNames[localDay.day]} - ${localDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+      label: `${dayNames[localDay.day]} - ${localDay.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
     };
 
     onSave(updatedDay);
@@ -182,11 +182,11 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
                 value={localDay.type}
                 onChange={(e) => setLocalDay(prev => ({ 
                   ...prev, 
-                  type: e.target.value as 'h2h_rv' | 'cart'
+                  type: e.target.value as 'h2h' | 'cart'
                 }))}
                 className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
-                <option value="h2h_rv">House to House / Return Visits</option>
+                <option value="h2h">House to House / Return Visits</option>
                 <option value="cart">Cart Witnessing</option>
               </select>
             </div>
@@ -791,7 +791,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                     {dayNames[fieldDay.day]}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
+                    {fieldDay.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
                   </p>
                 </div>
                 <div className="flex items-center">

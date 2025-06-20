@@ -123,7 +123,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
 
   const getServiceTypeIcon = (type: string) => {
     switch (type) {
-      case 'h2h_rv': return <Briefcase size={16} className="text-blue-600" />;
+      case 'h2h': return <Briefcase size={16} className="text-blue-600" />;
       case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
       default: return <Calendar size={16} className="text-gray-600" />;
     }
@@ -198,7 +198,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
                         {suggestion.dayName} - {new Date(suggestion.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>
                       <p className="text-sm opacity-75">
-                        {suggestion.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Witnessing'}
+                        {suggestion.type === 'h2h' ? 'House to House / Return Visits' : 'Cart Witnessing'}
                       </p>
                     </div>
                   </div>

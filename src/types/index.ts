@@ -3,13 +3,13 @@ export interface ServiceRecord {
   date: string;
   hours: number;
   minutes: number;
-  type: 'h2h' | 'rv' | 'cart';
+  type: 'h2h' | 'cart';
   notes?: string;
 }
 
 export interface FieldServiceDay {
   day: number; // 0-6 (Sunday-Saturday)
-  type: 'h2h_rv' | 'cart';
+  type: 'h2h' | 'cart';
   potentialHours: number;
   label: string;
 }
@@ -61,7 +61,7 @@ export interface YearlyStats {
 export interface FieldServiceSuggestion {
   date: string;
   dayName: string;
-  type: 'h2h_rv' | 'cart';
+  type: 'h2h' | 'cart';
   potentialHours: number;
   priority: 'high' | 'medium' | 'low';
 }

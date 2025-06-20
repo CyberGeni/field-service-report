@@ -7,8 +7,8 @@ const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
   yearlyTarget: 120,
   fieldServiceDays: [
-    { day: 6, type: 'h2h_rv', potentialHours: 4, label: 'Saturday - House to House/Return Visits' },
-    { day: 0, type: 'h2h_rv', potentialHours: 3, label: 'Sunday - House to House/Return Visits' }
+    { day: 6, type: 'h2h', potentialHours: 4, label: 'Saturday - House to House/Return Visits' },
+    { day: 0, type: 'h2h', potentialHours: 3, label: 'Sunday - House to House/Return Visits' }
   ],
   username: '',
   password: '',
@@ -51,12 +51,13 @@ export const useStorage = () => {
       if (recordsError) throw recordsError;
 
       // Transform database records to match our ServiceRecord type
+      // Convert 'rv' type to 'h2h' since we merged them
       const transformedRecords: ServiceRecord[] = (recordsData || []).map(record => ({
         id: record.id,
         date: record.date,
         hours: record.hours,
         minutes: record.minutes,
-        type: record.type as 'h2h' | 'rv' | 'cart',
+        type: record.type === 'rv' ? 'h2h' : record.type as 'h2h' | 'cart',
         notes: record.notes || undefined
       }));
 
@@ -81,7 +82,10 @@ export const useStorage = () => {
         if (settingsData.field_service_days_config) {
           try {
             fieldServiceDays = Array.isArray(settingsData.field_service_days_config) 
-              ? settingsData.field_service_days_config 
+              ? settingsData.field_service_days_config.map((fsd: any) => ({
+                  ...fsd,
+                  type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type // Convert old format
+                }))
               : DEFAULT_SETTINGS.fieldServiceDays;
           } catch (e) {
             console.warn('Failed to parse field_service_days_config, using default');
@@ -94,7 +98,7 @@ export const useStorage = () => {
           const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
           fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
             day,
-            type: index % 2 === 0 ? 'h2h_rv' : 'cart',
+            type: index % 2 === 0 ? 'h2h' : 'cart',
             potentialHours: index % 2 === 0 ? 4 : 2,
             label: `${dayNames[day]} - ${index % 2 === 0 ? 'House to House/Return Visits' : 'Cart Witnessing'}`
           }));

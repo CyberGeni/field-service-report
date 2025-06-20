@@ -38,7 +38,6 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     const props = { size, className: "text-white" };
     switch (type) {
       case 'h2h': return <Briefcase {...props} />;
-      case 'rv': return <Briefcase {...props} />;
       case 'cart': return <BaggageClaim {...props} />;
       default: return null;
     }
@@ -47,7 +46,6 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
   const getServiceTypeColor = (type: string): string => {
     switch (type) {
       case 'h2h': return 'bg-blue-500';
-      case 'rv': return 'bg-green-500';
       case 'cart': return 'bg-purple-500';
       default: return 'bg-gray-500';
     }
@@ -133,11 +131,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
         <div className="flex justify-between text-xs">
           <div className="flex items-center space-x-1">
             <div className="w-3 h-3 bg-blue-500 rounded"></div>
-            <span>House to House</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <div className="w-3 h-3 bg-green-500 rounded"></div>
-            <span>Return Visit</span>
+            <span>House to House / Return Visits</span>
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-3 h-3 bg-purple-500 rounded"></div>

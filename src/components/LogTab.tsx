@@ -24,7 +24,7 @@ const LogTab: React.FC<LogTabProps> = ({
   onPauseTimer, 
   onStopTimer 
 }) => {
-  const [selectedType, setSelectedType] = useState<'h2h' | 'rv' | 'cart'>('h2h');
+  const [selectedType, setSelectedType] = useState<'h2h' | 'cart'>('h2h');
   const [manualHours, setManualHours] = useState(0);
   const [manualMinutes, setManualMinutes] = useState(0);
   const [selectedDate, setSelectedDate] = useState(getDateString(new Date()));
@@ -122,7 +122,6 @@ const LogTab: React.FC<LogTabProps> = ({
   const getServiceTypeIcon = (type: string) => {
     switch (type) {
       case 'h2h': return <Briefcase size={20} />;
-      case 'rv': return <Briefcase size={20} />;
       case 'cart': return <BaggageClaim size={20} />;
       default: return <Clock size={20} />;
     }
@@ -164,16 +163,16 @@ const LogTab: React.FC<LogTabProps> = ({
           ].map(({ id, label, icon: Icon, description }) => (
             <button
               key={id}
-              onClick={() => setSelectedType(id as 'h2h' | 'rv' | 'cart')}
+              onClick={() => setSelectedType(id as 'h2h' | 'cart')}
               className={`w-full p-4 rounded-xl transition-all duration-200 border-2 ${
-                selectedType === id || (selectedType === 'rv' && id === 'h2h')
+                selectedType === id
                   ? 'bg-blue-50 text-blue-700 border-blue-200'
                   : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
               }`}
             >
               <div className="flex items-center space-x-4">
                 <div className={`p-3 rounded-lg ${
-                  selectedType === id || (selectedType === 'rv' && id === 'h2h')
+                  selectedType === id
                     ? 'bg-blue-100'
                     : 'bg-white'
                 }`}>
