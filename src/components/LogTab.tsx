@@ -58,7 +58,7 @@ const LogTab: React.FC<LogTabProps> = ({
     if (totalMinutes > 0) {
       // Use today's date for timer entries
       const timerRecord: ServiceRecord = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         date: getDateString(new Date()),
         hours,
         minutes,
@@ -76,7 +76,7 @@ const LogTab: React.FC<LogTabProps> = ({
 
   const saveRecord = (hours: number, minutes: number) => {
     const record: ServiceRecord = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       date: selectedDate,
       hours,
       minutes,
