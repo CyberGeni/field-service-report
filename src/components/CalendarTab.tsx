@@ -1,15 +1,237 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X } from 'lucide-react';
 import { ServiceRecord, Settings } from '../types';
-import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes } from '../utils/dateUtils';
+import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getDateString } from '../utils/dateUtils';
+import { useToast } from './ui/toast';
 
 interface CalendarTabProps {
   records: ServiceRecord[];
   settings: Settings;
+  onSaveRecord: (record: ServiceRecord) => void;
+  onDeleteRecord?: (id: string) => void;
 }
 
-const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
+interface EntryModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: ServiceRecord) => void;
+  onDelete?: (id: string) => void;
+  selectedDate: string;
+  existingRecords: ServiceRecord[];
+}
+
+const EntryModal: React.FC<EntryModalProps> = ({
+  isOpen,
+  onClose,
+  onSave,
+  onDelete,
+  selectedDate,
+  existingRecords
+}) => {
+  const [selectedType, setSelectedType] = useState<'h2h' | 'cart'>('h2h');
+  const [hours, setHours] = useState(0);
+  const [minutes, setMinutes] = useState(0);
+  const [notes, setNotes] = useState('');
+  const [editingRecord, setEditingRecord] = useState<ServiceRecord | null>(null);
+  const { addToast } = useToast();
+
+  React.useEffect(() => {
+    if (isOpen) {
+      // Reset form when modal opens
+      if (existingRecords.length > 0) {
+        // If there are existing records, edit the first one
+        const record = existingRecords[0];
+        setEditingRecord(record);
+        setSelectedType(record.type);
+        setHours(record.hours);
+        setMinutes(record.minutes);
+        setNotes(record.notes || '');
+      } else {
+        // New entry
+        setEditingRecord(null);
+        setSelectedType('h2h');
+        setHours(0);
+        setMinutes(0);
+        setNotes('');
+      }
+    }
+  }, [isOpen, existingRecords]);
+
+  const handleSave = () => {
+    if (hours === 0 && minutes === 0) {
+      addToast({
+        type: 'error',
+        title: 'Invalid Entry',
+        description: 'Please enter at least some time before saving'
+      });
+      return;
+    }
+
+    const record: ServiceRecord = {
+      id: editingRecord?.id || crypto.randomUUID(),
+      date: selectedDate,
+      hours,
+      minutes,
+      type: selectedType,
+      notes: notes.trim() || undefined
+    };
+
+    onSave(record);
+    
+    addToast({
+      type: 'success',
+      title: editingRecord ? 'Entry Updated' : 'Entry Added',
+      description: `${hours}h ${minutes}m logged for ${new Date(selectedDate).toLocaleDateString()}`
+    });
+    
+    onClose();
+  };
+
+  const handleDelete = () => {
+    if (editingRecord && onDelete) {
+      onDelete(editingRecord.id);
+      addToast({
+        type: 'success',
+        title: 'Entry Deleted',
+        description: 'Service record has been removed'
+      });
+      onClose();
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {editingRecord ? 'Edit Entry' : 'Add Entry'}
+              </h3>
+              <p className="text-sm text-gray-600">{formatDate(selectedDate)}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {/* Service Type Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: 'h2h', label: 'House to House', subtitle: 'Door-to-door & return visits' },
+                  { id: 'cart', label: 'Cart Witnessing', subtitle: 'Public witnessing' }
+                ].map(({ id, label, subtitle }) => (
+                  <button
+                    key={id}
+                    onClick={() => setSelectedType(id as 'h2h' | 'cart')}
+                    className={`p-3 rounded-xl transition-all duration-200 border-2 text-left ${
+                      selectedType === id
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-center">
+                      <div className="font-semibold text-sm">{label}</div>
+                      <div className="text-xs opacity-75 mt-1">{subtitle}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Input */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hours</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  value={hours}
+                  onChange={(e) => setHours(parseInt(e.target.value) || 0)}
+                  className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Minutes</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={minutes}
+                  onChange={(e) => setMinutes(parseInt(e.target.value) || 0)}
+                  className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                />
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Add any notes about your service..."
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-none"
+                rows={3}
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex space-x-3 mt-6">
+            {editingRecord && onDelete && (
+              <button
+                onClick={handleDelete}
+                className="bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center space-x-2"
+              >
+                <Trash2 size={16} />
+                <span>Delete</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={hours === 0 && minutes === 0}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
+            >
+              {editingRecord ? <Edit size={16} /> : <Plus size={16} />}
+              <span>{editingRecord ? 'Update' : 'Add'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveRecord, onDeleteRecord }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [showEntryModal, setShowEntryModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState('');
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   
@@ -57,6 +279,12 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     return 'bg-gray-500';
   };
 
+  const handleDayClick = (day: number) => {
+    const dateString = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    setSelectedDate(dateString);
+    setShowEntryModal(true);
+  };
+
   const renderCalendarDay = (day: number) => {
     const date = new Date(year, month, day);
     const isFieldDay = isFieldServiceDay(date, settings.fieldServiceDays);
@@ -66,9 +294,10 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     const isToday = new Date().toDateString() === date.toDateString();
 
     return (
-      <div
+      <button
         key={day}
-        className={`relative h-20 p-1 ${
+        onClick={() => handleDayClick(day)}
+        className={`relative h-20 p-1 w-full text-left transition-colors hover:bg-gray-100 ${
           isToday ? 'bg-blue-50' : 'bg-white'
         }`}
       >
@@ -94,7 +323,16 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
             </div>
           </div>
         )}
-      </div>
+        
+        {/* Add icon for clickable indication */}
+        <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {hasRecords ? (
+            <Edit size={12} className="text-gray-400" />
+          ) : (
+            <Plus size={12} className="text-gray-400" />
+          )}
+        </div>
+      </button>
     );
   };
 
@@ -105,6 +343,8 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
   const monthlyTotal = records
     .filter(record => record.date.startsWith(`${year}-${(month + 1).toString().padStart(2, '0')}`))
     .reduce((total, record) => total + record.hours + record.minutes / 60, 0);
+
+  const selectedDateRecords = selectedDate ? records.filter(r => r.date === selectedDate) : [];
 
   return (
     <div className="space-y-6 pb-6">
@@ -130,6 +370,13 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
         >
           <ChevronRight size={20} />
         </button>
+      </div>
+
+      {/* Instructions */}
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <p className="text-blue-800 text-sm font-medium">
+          💡 Click on any day to add or edit your service time for that date
+        </p>
       </div>
 
       {/* Legend */}
@@ -167,7 +414,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
         </div>
         
         {/* Calendar Days */}
-        <div className="grid grid-cols-7 divide-x divide-y divide-gray-200">
+        <div className="grid grid-cols-7 divide-x divide-y divide-gray-200 group">
           {/* Empty cells for days before month starts */}
           {Array.from({ length: firstDay }, (_, i) => renderEmptyDay(i))}
           
@@ -180,6 +427,16 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
           )}
         </div>
       </div>
+
+      {/* Entry Modal */}
+      <EntryModal
+        isOpen={showEntryModal}
+        onClose={() => setShowEntryModal(false)}
+        onSave={onSaveRecord}
+        onDelete={onDeleteRecord}
+        selectedDate={selectedDate}
+        existingRecords={selectedDateRecords}
+      />
     </div>
   );
 };
