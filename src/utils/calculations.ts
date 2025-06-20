@@ -108,14 +108,18 @@ export const generateFieldServiceSuggestions = (
   
   const currentDate = new Date();
   const [year, monthNum] = month.split('-').map(Number);
+  
+  // Only suggest dates from today onwards within the current month
+  const isCurrentMonth = currentDate.getFullYear() === year && currentDate.getMonth() + 1 === monthNum;
+  const startDay = isCurrentMonth ? currentDate.getDate() : 1;
   const monthEnd = new Date(year, monthNum, 0);
   const daysInMonth = monthEnd.getDate();
   
   const suggestions: FieldServiceSuggestion[] = [];
   const recordedDates = new Set(records.filter(r => r.date.startsWith(month)).map(r => r.date));
   
-  // Generate suggestions for remaining days in the month
-  for (let day = currentDate.getDate(); day <= daysInMonth; day++) {
+  // Generate suggestions for remaining days in the month (starting from today if current month)
+  for (let day = startDay; day <= daysInMonth; day++) {
     const date = new Date(year, monthNum - 1, day);
     const dateString = date.toISOString().split('T')[0];
     
