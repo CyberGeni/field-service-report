@@ -93,7 +93,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
               <User size={40} className="text-white" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-3 font-chivo">
+          <h1 className="text-3xl font-bold text-gray-800 mb-3 font-libre-franklin">
             Set Up Your Profile
           </h1>
           <p className="text-gray-600 text-lg">

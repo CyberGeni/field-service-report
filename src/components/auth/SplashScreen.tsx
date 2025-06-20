@@ -17,7 +17,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onSignIn, onSignUp }) => {
               <Clock size={40} className="text-white" />
             </div>
           </div>
-          <h1 className="text-4xl font-bold text-gray-800 mb-3 font-chivo">
+          <h1 className="text-4xl font-bold text-gray-800 mb-3 font-libre-franklin">
             Field Service Tracker
           </h1>
           <p className="text-gray-600 text-lg">
