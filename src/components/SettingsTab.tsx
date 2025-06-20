@@ -794,7 +794,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                     {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
                   </p>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center">
                   <button
                     onClick={() => handleEditFieldServiceDay(fieldDay)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
