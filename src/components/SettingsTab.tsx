@@ -119,12 +119,13 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             {/* Avatar */}
             <div className="text-center">
               <div className="relative inline-block">
-                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden aspect-square">
+                <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                   {localProfile.avatar_url ? (
                     <img
                       src={localProfile.avatar_url}
                       alt={localProfile.name}
-                      className="w-full h-full object-cover aspect-square"
+                      className="w-full h-full object-cover rounded-full"
+                      style={{ aspectRatio: '1 / 1' }}
                     />
                   ) : (
                     <User size={28} className="text-gray-400" />
@@ -298,7 +299,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="bg-white rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center space-x-3">
-              <User size={24} className="text-blue-500 aspect-square" />
+              <User size={24} className="text-blue-500" />
               <h3 className="text-lg font-semibold text-gray-800">Profile</h3>
             </div>
             <button
@@ -311,12 +312,13 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
           
           <div className="flex items-center space-x-4">
-            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+            <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
               {profile.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
-                  className="w-full h-full object-cover aspect-square"
+                  className="w-full h-full object-cover rounded-full"
+                  style={{ aspectRatio: '1 / 1' }}
                 />
               ) : (
                 <User size={24} className="text-gray-400" />
