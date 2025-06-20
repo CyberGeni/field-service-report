@@ -41,6 +41,8 @@ export const useStorage = () => {
       setLoading(true);
       setError(null);
 
+      console.log('Loading data for user:', user.id);
+
       // Load service records
       const { data: recordsData, error: recordsError } = await supabase
         .from('service_records')
@@ -75,25 +77,29 @@ export const useStorage = () => {
       }
 
       if (settingsData) {
+        console.log('Loaded settings from database:', settingsData);
+        
         // Parse field service days from database format
         let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
         
         // Try to use the new field_service_days_config column first
-        if (settingsData.field_service_days_config) {
+        if (settingsData.field_service_days_config && Array.isArray(settingsData.field_service_days_config)) {
           try {
-            fieldServiceDays = Array.isArray(settingsData.field_service_days_config) 
-              ? settingsData.field_service_days_config.map((fsd: any) => ({
-                  ...fsd,
-                  type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type // Convert old format
-                }))
-              : DEFAULT_SETTINGS.fieldServiceDays;
+            fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
+              day: fsd.day,
+              type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type, // Convert old format
+              potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
+              label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+            }));
+            console.log('Using field_service_days_config:', fieldServiceDays);
           } catch (e) {
-            console.warn('Failed to parse field_service_days_config, using default');
+            console.warn('Failed to parse field_service_days_config:', e);
             fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
           }
         }
         // Fallback to legacy field_service_days if config is not available
         else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
+          console.log('Converting legacy field_service_days:', settingsData.field_service_days);
           // Convert legacy format to new format
           const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
           fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
@@ -104,15 +110,19 @@ export const useStorage = () => {
           }));
         }
 
-        setSettings({
+        const loadedSettings = {
           monthlyTarget: settingsData.monthly_target,
           yearlyTarget: settingsData.yearly_target,
           fieldServiceDays,
           serviceYearStart: settingsData.service_year_start,
           username: '', // We'll get this from profile
           password: '' // Not stored in database
-        });
+        };
+
+        console.log('Final loaded settings:', loadedSettings);
+        setSettings(loadedSettings);
       } else {
+        console.log('No settings found, creating default settings');
         // Create default settings for new user
         await createDefaultSettings();
       }
@@ -128,6 +138,8 @@ export const useStorage = () => {
     if (!user) return;
 
     try {
+      console.log('Creating default settings for user:', user.id);
+      
       const { error } = await supabase
         .from('user_settings')
         .insert({
@@ -140,9 +152,82 @@ export const useStorage = () => {
         });
 
       if (error) throw error;
+      
+      console.log('Default settings created successfully');
+      setSettings(DEFAULT_SETTINGS);
     } catch (err: any) {
       console.error('Error creating default settings:', err);
     }
+  };
+
+  const mergeRecordsForDate = async (date: string, newRecord: ServiceRecord) => {
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    // Get all existing records for this date and service type
+    const { data: existingRecords, error: fetchError } = await supabase
+      .from('service_records')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('date', date)
+      .eq('type', newRecord.type);
+
+    if (fetchError) throw fetchError;
+
+    // Calculate total time including the new record
+    let totalMinutes = newRecord.hours * 60 + newRecord.minutes;
+    let combinedNotes = newRecord.notes ? [newRecord.notes] : [];
+
+    // Add existing records' time and notes
+    existingRecords?.forEach(record => {
+      totalMinutes += record.hours * 60 + record.minutes;
+      if (record.notes && record.notes.trim()) {
+        combinedNotes.push(record.notes.trim());
+      }
+    });
+
+    const finalHours = Math.floor(totalMinutes / 60);
+    const finalMinutes = totalMinutes % 60;
+    const finalNotes = combinedNotes.length > 0 ? combinedNotes.join('; ') : undefined;
+
+    // Delete all existing records for this date and type
+    if (existingRecords && existingRecords.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('service_records')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('date', date)
+        .eq('type', newRecord.type);
+
+      if (deleteError) throw deleteError;
+    }
+
+    // Insert the merged record
+    const mergedRecord = {
+      id: newRecord.id,
+      user_id: user.id,
+      date: date,
+      hours: finalHours,
+      minutes: finalMinutes,
+      type: newRecord.type,
+      notes: finalNotes || null
+    };
+
+    const { error: insertError } = await supabase
+      .from('service_records')
+      .insert(mergedRecord);
+
+    if (insertError) throw insertError;
+
+    return {
+      id: newRecord.id,
+      date: date,
+      hours: finalHours,
+      minutes: finalMinutes,
+      type: newRecord.type,
+      notes: finalNotes
+    };
   };
 
   const saveRecord = async (record: ServiceRecord) => {
@@ -154,61 +239,38 @@ export const useStorage = () => {
     try {
       setError(null);
 
-      // Check if a record already exists for this date and type
-      const existingRecord = records.find(r => r.date === record.date && r.type === record.type);
+      // Check if this is an update to an existing record
+      const existingRecord = records.find(r => r.id === record.id);
       
       if (existingRecord) {
-        // Update existing record
+        // This is an edit - replace the existing record
         const { error } = await supabase
           .from('service_records')
           .update({
-            hours: record.hours,
-            minutes: record.minutes,
-            notes: record.notes || null
-          })
-          .eq('id', existingRecord.id)
-          .eq('user_id', user.id);
-
-        if (error) throw error;
-
-        // Update local state
-        const updatedRecords = records.map(r => 
-          r.id === existingRecord.id 
-            ? { ...record, id: existingRecord.id }
-            : r
-        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        setRecords(updatedRecords);
-      } else {
-        // Create new record
-        const { data, error } = await supabase
-          .from('service_records')
-          .insert({
-            id: record.id,
-            user_id: user.id,
             date: record.date,
             hours: record.hours,
             minutes: record.minutes,
             type: record.type,
             notes: record.notes || null
           })
-          .select()
-          .single();
+          .eq('id', record.id)
+          .eq('user_id', user.id);
 
         if (error) throw error;
 
         // Update local state
-        const newRecord = {
-          id: data.id,
-          date: data.date,
-          hours: data.hours,
-          minutes: data.minutes,
-          type: data.type as 'h2h' | 'cart',
-          notes: data.notes || undefined
-        };
-
-        const updatedRecords = [...records, newRecord]
+        const updatedRecords = records.map(r => r.id === record.id ? record : r)
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setRecords(updatedRecords);
+      } else {
+        // This is a new record - merge with existing records for the same date and type
+        const mergedRecord = await mergeRecordsForDate(record.date, record);
+
+        // Update local state - remove any existing records for this date/type and add the merged one
+        const updatedRecords = [
+          ...records.filter(r => !(r.date === record.date && r.type === record.type)),
+          mergedRecord
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         
         setRecords(updatedRecords);
       }
@@ -259,7 +321,7 @@ export const useStorage = () => {
 
       const updatedSettings = { ...settings, ...newSettings };
 
-      // Prepare the update data
+      // Prepare the update data - ensure field service days are properly formatted
       const updateData: any = {
         user_id: user.id,
         monthly_target: updatedSettings.monthlyTarget,
@@ -271,20 +333,25 @@ export const useStorage = () => {
 
       console.log('Updating settings with data:', updateData);
 
-      const { error } = await supabase
+      // Use upsert to handle both insert and update cases
+      const { data, error } = await supabase
         .from('user_settings')
         .upsert(updateData, {
           onConflict: 'user_id'
-        });
+        })
+        .select()
+        .single();
 
       if (error) {
         console.error('Database error:', error);
         throw error;
       }
 
+      console.log('Settings updated successfully in database:', data);
+
       // Update local state only after successful database update
       setSettings(updatedSettings);
-      console.log('Settings updated successfully:', updatedSettings);
+      console.log('Local settings updated:', updatedSettings);
 
     } catch (err: any) {
       console.error('Error updating settings:', err);
