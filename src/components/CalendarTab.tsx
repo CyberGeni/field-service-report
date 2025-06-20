@@ -102,6 +102,28 @@ const EntryModal: React.FC<EntryModalProps> = ({
     }
   };
 
+  const handleDelete = async () => {
+    const existingRecord = existingRecords.find(r => r.type === selectedType);
+    
+    if (existingRecord && onDelete) {
+      try {
+        await onDelete(existingRecord.id);
+        addToast({
+          type: 'success',
+          title: 'Entry Deleted',
+          description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record deleted for ${new Date(selectedDate).toLocaleDateString()}`
+        });
+        onClose();
+      } catch (error) {
+        addToast({
+          type: 'error',
+          title: 'Delete Failed',
+          description: 'Failed to delete service record'
+        });
+      }
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'long',
@@ -110,6 +132,9 @@ const EntryModal: React.FC<EntryModalProps> = ({
       day: 'numeric'
     });
   };
+
+  const existingRecord = existingRecords.find(r => r.type === selectedType);
+  const hasExistingRecord = !!existingRecord;
 
   if (!isOpen) return null;
 
@@ -121,7 +146,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-lg font-semibold text-gray-800">
-                Service Time Entry
+                {hasExistingRecord ? 'Edit Entry' : 'Add Entry'}
               </h3>
               <p className="text-sm text-gray-600">{formatDate(selectedDate)}</p>
             </div>
@@ -241,18 +266,30 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
           {/* Actions */}
           <div className="flex space-x-3 mt-6">
+            {/* Delete button - only show if there's an existing record */}
+            {hasExistingRecord && onDelete && (
+              <button
+                onClick={handleDelete}
+                className="bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center space-x-2"
+              >
+                <Trash2 size={16} />
+                <span>Delete</span>
+              </button>
+            )}
+            
             <button
               onClick={onClose}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
             >
               Cancel
             </button>
+            
             <button
               onClick={handleSave}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
             >
               <Edit size={16} />
-              <span>Save Changes</span>
+              <span>{hasExistingRecord ? 'Update' : 'Save'}</span>
             </button>
           </div>
         </div>
