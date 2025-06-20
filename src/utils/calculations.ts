@@ -107,13 +107,24 @@ export const generateFieldServiceSuggestions = (
   }
   
   const currentDate = new Date();
+  const currentHour = currentDate.getHours();
   const [year, monthNum] = month.split('-').map(Number);
   
   // Only suggest dates from today onwards within the current month
   const isCurrentMonth = currentDate.getFullYear() === year && (currentDate.getMonth() + 1) === monthNum;
   
-  // If this is the current month, start from today. Otherwise, start from the 1st
-  const startDay = isCurrentMonth ? currentDate.getDate() : 1;
+  // If this is the current month, determine start day based on time
+  let startDay: number;
+  if (isCurrentMonth) {
+    // If it's late in the day (after 6 PM), start suggestions from tomorrow
+    if (currentHour >= 18) {
+      startDay = currentDate.getDate() + 1;
+    } else {
+      startDay = currentDate.getDate();
+    }
+  } else {
+    startDay = 1; // Start from the 1st for other months
+  }
   
   const monthEnd = new Date(year, monthNum, 0);
   const daysInMonth = monthEnd.getDate();
@@ -121,7 +132,7 @@ export const generateFieldServiceSuggestions = (
   const suggestions: FieldServiceSuggestion[] = [];
   const recordedDates = new Set(records.filter(r => r.date.startsWith(month)).map(r => r.date));
   
-  // Generate suggestions for remaining days in the month (starting from today if current month)
+  // Generate suggestions for remaining days in the month (starting from appropriate day)
   for (let day = startDay; day <= daysInMonth; day++) {
     const date = new Date(year, monthNum - 1, day);
     const dateString = date.toISOString().split('T')[0];
