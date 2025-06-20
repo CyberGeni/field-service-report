@@ -109,21 +109,14 @@ export const generateFieldServiceSuggestions = (
   const currentDate = new Date();
   const [year, monthNum] = month.split('-').map(Number);
   
-  // Debug logging
-  console.log('Current date:', currentDate.toDateString());
-  console.log('Month being processed:', month, 'Year:', year, 'Month num:', monthNum);
-  
   // Only suggest dates from today onwards within the current month
   const isCurrentMonth = currentDate.getFullYear() === year && (currentDate.getMonth() + 1) === monthNum;
-  console.log('Is current month:', isCurrentMonth);
   
   // If this is the current month, start from today. Otherwise, start from the 1st
   const startDay = isCurrentMonth ? currentDate.getDate() : 1;
-  console.log('Start day:', startDay);
   
   const monthEnd = new Date(year, monthNum, 0);
   const daysInMonth = monthEnd.getDate();
-  console.log('Days in month:', daysInMonth);
   
   const suggestions: FieldServiceSuggestion[] = [];
   const recordedDates = new Set(records.filter(r => r.date.startsWith(month)).map(r => r.date));
@@ -133,18 +126,14 @@ export const generateFieldServiceSuggestions = (
     const date = new Date(year, monthNum - 1, day);
     const dateString = date.toISOString().split('T')[0];
     
-    console.log(`Processing day ${day}: ${date.toDateString()} (${dateString})`);
-    
     // Skip if already recorded
     if (recordedDates.has(dateString)) {
-      console.log(`Skipping ${dateString} - already recorded`);
       continue;
     }
     
     // Check if this day matches any of the configured field service days
     const fieldServiceDay = settings.fieldServiceDays.find(fsd => fsd.day === date.getDay());
     if (!fieldServiceDay) {
-      console.log(`Skipping ${dateString} - not a configured field service day (day of week: ${date.getDay()})`);
       continue;
     }
     
@@ -166,11 +155,8 @@ export const generateFieldServiceSuggestions = (
       priority
     };
     
-    console.log('Adding suggestion:', suggestion);
     suggestions.push(suggestion);
   }
-  
-  console.log('Final suggestions:', suggestions);
   
   // Sort by priority and potential hours
   return suggestions.sort((a, b) => {

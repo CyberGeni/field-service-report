@@ -138,6 +138,16 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     }
   };
 
+  // Format suggestion date properly
+  const formatSuggestionDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'long',
+      month: 'short', 
+      day: 'numeric' 
+    });
+  };
+
   return (
     <div className="space-y-4">
       {/* Profile Header */}
@@ -192,9 +202,10 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
+                    {getServiceTypeIcon(suggestion.type)}
                     <div>
                       <p className="font-medium">
-                        {suggestion.dayName} - {new Date(suggestion.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {formatSuggestionDate(suggestion.date)}
                       </p>
                       <p className="text-sm opacity-75">
                         {suggestion.type === 'h2h' ? 'House to House / Return Visits' : 'Cart Witnessing'}
