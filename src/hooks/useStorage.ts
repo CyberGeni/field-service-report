@@ -8,8 +8,8 @@ const DEFAULT_SETTINGS: Settings = {
   yearlyTarget: 120,
   fieldServiceDays: [
     { day: 6, type: 'h2h_rv', potentialHours: 5, label: 'Saturday - House to House/Return Visits' },
-    { day: 1, type: 'cart', potentialHours: 2, label: 'Monday - Cart' },
-    { day: 3, type: 'cart', potentialHours: 2, label: 'Wednesday - Cart' },
+    { day: 1, type: 'cart', potentialHours: 2, label: 'Monday - Cart Witnessing' },
+    { day: 3, type: 'cart', potentialHours: 2, label: 'Wednesday - Cart Witnessing' },
     { day: 4, type: 'h2h_rv', potentialHours: 4, label: 'Thursday - House to House/Return Visits' }
   ],
   username: '',
