@@ -35,31 +35,90 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
   onSave
 }) => {
   const [localDays, setLocalDays] = useState<FieldServiceDay[]>(fieldServiceDays);
+  const [error, setError] = useState('');
   const { addToast } = useToast();
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   const addFieldServiceDay = () => {
+    // Find the first day that's not already configured
+    const usedDays = localDays.map(day => day.day);
+    const availableDay = [0, 1, 2, 3, 4, 5, 6].find(day => !usedDays.includes(day));
+    
+    if (availableDay === undefined) {
+      setError('All days of the week are already configured');
+      addToast({
+        type: 'error',
+        title: 'Cannot Add Day',
+        description: 'All days of the week are already configured'
+      });
+      return;
+    }
+
     const newDay: FieldServiceDay = {
-      day: 0,
+      day: availableDay,
       type: 'h2h_rv',
       potentialHours: 2,
-      label: 'Sunday - House to House/Return Visits'
+      label: `${dayNames[availableDay]} - House to House/Return Visits`
     };
+    
     setLocalDays(prev => [...prev, newDay]);
+    setError('');
   };
 
   const updateFieldServiceDay = (index: number, updates: Partial<FieldServiceDay>) => {
-    setLocalDays(prev => prev.map((day, i) => 
-      i === index ? { ...day, ...updates } : day
-    ));
+    setLocalDays(prev => prev.map((day, i) => {
+      if (i === index) {
+        const updatedDay = { ...day, ...updates };
+        
+        // Check for duplicate days when updating the day field
+        if (updates.day !== undefined) {
+          const otherDays = prev.filter((_, otherIndex) => otherIndex !== index);
+          const isDuplicate = otherDays.some(otherDay => otherDay.day === updates.day);
+          
+          if (isDuplicate) {
+            setError(`${dayNames[updates.day]} is already configured`);
+            addToast({
+              type: 'error',
+              title: 'Duplicate Day',
+              description: `${dayNames[updates.day]} is already configured`
+            });
+            return day; // Don't update if duplicate
+          } else {
+            setError('');
+          }
+        }
+        
+        // Update label when day or type changes
+        if (updates.day !== undefined || updates.type !== undefined) {
+          updatedDay.label = `${dayNames[updatedDay.day]} - ${updatedDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`;
+        }
+        
+        return updatedDay;
+      }
+      return day;
+    }));
   };
 
   const removeFieldServiceDay = (index: number) => {
     setLocalDays(prev => prev.filter((_, i) => i !== index));
+    setError('');
   };
 
   const handleSave = () => {
+    // Validate that all days have valid potential hours
+    const invalidDays = localDays.filter(day => !day.potentialHours || day.potentialHours <= 0);
+    
+    if (invalidDays.length > 0) {
+      setError('All days must have potential hours greater than 0');
+      addToast({
+        type: 'error',
+        title: 'Invalid Hours',
+        description: 'All days must have potential hours greater than 0'
+      });
+      return;
+    }
+
     onSave(localDays);
     addToast({
       type: 'success',
@@ -75,6 +134,19 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
       case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
       default: return null;
     }
+  };
+
+  // Get available days for dropdown
+  const getAvailableDays = (currentIndex: number) => {
+    const usedDays = localDays
+      .map((day, index) => index === currentIndex ? null : day.day)
+      .filter(day => day !== null);
+    
+    return dayNames.map((name, index) => ({
+      value: index,
+      label: name,
+      disabled: usedDays.includes(index)
+    }));
   };
 
   if (!isOpen) return null;
@@ -94,6 +166,13 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
             </button>
           </div>
 
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+
           <p className="text-sm text-gray-600 mb-6">
             Configure your typical field service days with expected hours for better scheduling suggestions.
           </p>
@@ -107,13 +186,19 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
                     <select
                       value={fieldDay.day}
                       onChange={(e) => updateFieldServiceDay(index, { 
-                        day: parseInt(e.target.value),
-                        label: `${dayNames[parseInt(e.target.value)]} - ${fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+                        day: parseInt(e.target.value)
                       })}
                       className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      {dayNames.map((day, dayIndex) => (
-                        <option key={dayIndex} value={dayIndex}>{day}</option>
+                      {getAvailableDays(index).map((option) => (
+                        <option 
+                          key={option.value} 
+                          value={option.value}
+                          disabled={option.disabled}
+                          className={option.disabled ? 'text-gray-400' : ''}
+                        >
+                          {option.label} {option.disabled ? '(already configured)' : ''}
+                        </option>
                       ))}
                     </select>
                   </div>
@@ -123,8 +208,7 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
                     <select
                       value={fieldDay.type}
                       onChange={(e) => updateFieldServiceDay(index, { 
-                        type: e.target.value as 'h2h_rv' | 'cart',
-                        label: `${dayNames[fieldDay.day]} - ${e.target.value === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+                        type: e.target.value as 'h2h_rv' | 'cart'
                       })}
                       className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
@@ -140,8 +224,19 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
                       min="0.5"
                       max="12"
                       step="0.5"
-                      value={fieldDay.potentialHours}
-                      onChange={(e) => updateFieldServiceDay(index, { potentialHours: parseFloat(e.target.value) || 1 })}
+                      value={fieldDay.potentialHours || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '') {
+                          updateFieldServiceDay(index, { potentialHours: 0 });
+                        } else {
+                          const numValue = parseFloat(value);
+                          if (!isNaN(numValue) && numValue >= 0.5) {
+                            updateFieldServiceDay(index, { potentialHours: numValue });
+                          }
+                        }
+                      }}
+                      placeholder="Enter hours"
                       className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>
@@ -170,10 +265,13 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={addFieldServiceDay}
-              className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-600 px-4 py-2 rounded-lg transition-colors"
+              disabled={localDays.length >= 7}
+              className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 disabled:bg-gray-100 disabled:text-gray-400 text-purple-600 px-4 py-2 rounded-lg transition-colors"
             >
               <Plus size={16} />
-              <span className="font-medium">Add Day</span>
+              <span className="font-medium">
+                {localDays.length >= 7 ? 'All Days Configured' : 'Add Day'}
+              </span>
             </button>
           </div>
 
@@ -187,7 +285,8 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors"
+              disabled={localDays.some(day => !day.potentialHours || day.potentialHours <= 0)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors"
             >
               Save Changes
             </button>
