@@ -127,7 +127,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
         {/* Avatar and Service Type */}
         
         
-        <h1 className="text-3xl font-bold text-gray-800 mb-4 font-playfair">
+        <h1 className="text-3xl font-bold text-gray-800 mb-4 font-chivo">
           Good {timeOfDay}, {displayName}!
         </h1>
         <p className="text-gray-600 text-lg tracking-tight">
