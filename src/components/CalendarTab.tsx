@@ -34,11 +34,16 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     return records.filter(record => record.date === dateString);
   };
 
-  const getTotalHoursForDate = (day: number): number => {
+  const getTotalTimeForDate = (day: number): { hours: number; minutes: number } => {
     const dayRecords = getRecordsForDate(day);
-    return dayRecords.reduce((total, record) => {
-      return total + record.hours + (record.minutes / 60);
+    const totalMinutes = dayRecords.reduce((total, record) => {
+      return total + (record.hours * 60) + record.minutes;
     }, 0);
+    
+    return {
+      hours: Math.floor(totalMinutes / 60),
+      minutes: totalMinutes % 60
+    };
   };
 
   const getServiceTypeColor = (records: ServiceRecord[]): string => {
@@ -56,7 +61,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
     const date = new Date(year, month, day);
     const isFieldDay = isFieldServiceDay(date, settings.fieldServiceDays);
     const dayRecords = getRecordsForDate(day);
-    const totalHours = getTotalHoursForDate(day);
+    const totalTime = getTotalTimeForDate(day);
     const hasRecords = dayRecords.length > 0;
     const isToday = new Date().toDateString() === date.toDateString();
 
@@ -83,7 +88,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
             <div className={`${getServiceTypeColor(dayRecords)} rounded p-1 text-white text-xs h-full flex flex-col justify-center`}>
               <div className="text-center">
                 <div className="font-semibold text-sm">
-                  {Math.floor(totalHours)}h {Math.round((totalHours % 1) * 60)}m
+                  {totalTime.hours}:{totalTime.minutes.toString().padStart(2, '0')}
                 </div>
                 {dayRecords.length > 1 && (
                   <div className="text-xs opacity-75 mt-1">
