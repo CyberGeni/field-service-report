@@ -134,7 +134,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings }) => {
 
       {/* Legend */}
       <div className="bg-white rounded-xl p-4">
-        <h3 className="text-sm font-semibold text-gray-800 mb-3">Legend</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-3">Color codes</h3>
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-blue-500 rounded"></div>
