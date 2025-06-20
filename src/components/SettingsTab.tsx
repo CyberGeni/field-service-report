@@ -791,7 +791,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                     {dayNames[fieldDay.day]}
                   </p>
                   <p className="text-sm text-gray-600">
-                    {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
+                    {fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
                   </p>
                 </div>
                 <div className="flex items-center">
