@@ -15,6 +15,14 @@ export function useAuth() {
         
         if (error) {
           console.error('Error getting session:', error)
+          
+          // Check if the error is due to an invalid refresh token
+          if (error.message?.includes('Refresh Token Not Found') || 
+              error.message?.includes('Invalid Refresh Token')) {
+            console.log('Invalid refresh token detected, clearing session...')
+            // Clear the invalid session from local storage
+            await supabase.auth.signOut()
+          }
         } else {
           setSession(session)
           setUser(session?.user ?? null)
