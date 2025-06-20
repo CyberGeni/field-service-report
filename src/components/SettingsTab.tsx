@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X, Plus, Trash2 } from 'lucide-react';
+import { Save, User, Target, Calendar, Shield, LogOut, Camera, Edit, X, Plus, Trash2, MapPin, ShoppingCart } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
+import { useToast } from './ui/toast';
 
 interface SettingsTabProps {
   settings: Settings;
@@ -20,6 +21,183 @@ interface EditProfileModalProps {
   onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
 }
 
+interface EditFieldServiceDaysModalProps {
+  fieldServiceDays: FieldServiceDay[];
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (days: FieldServiceDay[]) => void;
+}
+
+const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
+  fieldServiceDays,
+  isOpen,
+  onClose,
+  onSave
+}) => {
+  const [localDays, setLocalDays] = useState<FieldServiceDay[]>(fieldServiceDays);
+  const { addToast } = useToast();
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  const addFieldServiceDay = () => {
+    const newDay: FieldServiceDay = {
+      day: 0,
+      type: 'h2h_rv',
+      potentialHours: 2,
+      label: 'Sunday - House to House/Return Visits'
+    };
+    setLocalDays(prev => [...prev, newDay]);
+  };
+
+  const updateFieldServiceDay = (index: number, updates: Partial<FieldServiceDay>) => {
+    setLocalDays(prev => prev.map((day, i) => 
+      i === index ? { ...day, ...updates } : day
+    ));
+  };
+
+  const removeFieldServiceDay = (index: number) => {
+    setLocalDays(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSave = () => {
+    onSave(localDays);
+    addToast({
+      type: 'success',
+      title: 'Field Service Days Updated',
+      description: `${localDays.length} days configured successfully`
+    });
+    onClose();
+  };
+
+  const getServiceTypeIcon = (type: string) => {
+    switch (type) {
+      case 'h2h_rv': return <MapPin size={16} className="text-blue-600" />;
+      case 'cart': return <ShoppingCart size={16} className="text-purple-600" />;
+      default: return null;
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-gray-800">Edit Field Service Days</h3>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          <p className="text-sm text-gray-600 mb-6">
+            Configure your typical field service days with expected hours for better scheduling suggestions.
+          </p>
+          
+          <div className="space-y-4 mb-6">
+            {localDays.map((fieldDay, index) => (
+              <div key={index} className="bg-gray-50 rounded-xl p-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
+                    <select
+                      value={fieldDay.day}
+                      onChange={(e) => updateFieldServiceDay(index, { 
+                        day: parseInt(e.target.value),
+                        label: `${dayNames[parseInt(e.target.value)]} - ${fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
+                      })}
+                      className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {dayNames.map((day, dayIndex) => (
+                        <option key={dayIndex} value={dayIndex}>{day}</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                    <select
+                      value={fieldDay.type}
+                      onChange={(e) => updateFieldServiceDay(index, { 
+                        type: e.target.value as 'h2h_rv' | 'cart',
+                        label: `${dayNames[fieldDay.day]} - ${e.target.value === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
+                      })}
+                      className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="h2h_rv">House to House / Return Visits</option>
+                      <option value="cart">Cart Ministry</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Potential Hours</label>
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="12"
+                      step="0.5"
+                      value={fieldDay.potentialHours}
+                      onChange={(e) => updateFieldServiceDay(index, { potentialHours: parseFloat(e.target.value) || 1 })}
+                      className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => removeFieldServiceDay(index)}
+                      className="w-full p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            
+            {localDays.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+                <p>No field service days configured</p>
+                <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between mb-6">
+            <button
+              onClick={addFieldServiceDay}
+              className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-600 px-4 py-2 rounded-lg transition-colors"
+            >
+              <Plus size={16} />
+              <span className="font-medium">Add Day</span>
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className="flex space-x-3">
+            <button
+              onClick={onClose}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors"
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const EditProfileModal: React.FC<EditProfileModalProps> = ({
   profile,
   isOpen,
@@ -31,6 +209,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const { addToast } = useToast();
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -55,15 +234,30 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
       
       if (uploadError) {
         setError('Failed to upload avatar: ' + uploadError.message);
+        addToast({
+          type: 'error',
+          title: 'Upload Failed',
+          description: 'Failed to upload avatar image'
+        });
         return;
       }
 
       if (avatarUrl) {
         setLocalProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
+        addToast({
+          type: 'success',
+          title: 'Avatar Uploaded',
+          description: 'Profile picture uploaded successfully'
+        });
       }
     } catch (error) {
       console.error('Avatar upload error:', error);
       setError('Failed to upload avatar');
+      addToast({
+        type: 'error',
+        title: 'Upload Error',
+        description: 'An unexpected error occurred'
+      });
     } finally {
       setUploading(false);
     }
@@ -83,9 +277,19 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
         service_type: localProfile.service_type,
         avatar_url: localProfile.avatar_url
       });
+      addToast({
+        type: 'success',
+        title: 'Profile Updated',
+        description: 'Your profile has been updated successfully'
+      });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to update profile');
+      addToast({
+        type: 'error',
+        title: 'Update Failed',
+        description: 'Failed to update profile'
+      });
     } finally {
       setSaving(false);
     }
@@ -241,17 +445,28 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   onSignOut 
 }) => {
   const [localSettings, setLocalSettings] = useState(settings);
-  const [showPassword, setShowPassword] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
+  const { addToast } = useToast();
 
   const handleSave = async () => {
     setSaving(true);
     try {
       onUpdateSettings(localSettings);
+      addToast({
+        type: 'success',
+        title: 'Settings Saved',
+        description: 'Your settings have been updated successfully'
+      });
     } catch (error) {
       console.error('Save error:', error);
+      addToast({
+        type: 'error',
+        title: 'Save Failed',
+        description: 'Failed to save settings'
+      });
     } finally {
       setSaving(false);
     }
@@ -261,8 +476,18 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     setSigningOut(true);
     try {
       await onSignOut();
+      addToast({
+        type: 'info',
+        title: 'Signed Out',
+        description: 'You have been signed out successfully'
+      });
     } catch (error) {
       console.error('Sign out error:', error);
+      addToast({
+        type: 'error',
+        title: 'Sign Out Failed',
+        description: 'Failed to sign out'
+      });
     } finally {
       setSigningOut(false);
     }
@@ -274,33 +499,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const addFieldServiceDay = () => {
-    const newDay: FieldServiceDay = {
-      day: 0,
-      type: 'h2h_rv',
-      potentialHours: 2,
-      label: 'New Field Service Day'
-    };
-    setLocalSettings(prev => ({
-      ...prev,
-      fieldServiceDays: [...prev.fieldServiceDays, newDay]
-    }));
-  };
-
-  const updateFieldServiceDay = (index: number, updates: Partial<FieldServiceDay>) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      fieldServiceDays: prev.fieldServiceDays.map((day, i) => 
-        i === index ? { ...day, ...updates } : day
-      )
-    }));
-  };
-
-  const removeFieldServiceDay = (index: number) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      fieldServiceDays: prev.fieldServiceDays.filter((_, i) => i !== index)
-    }));
+  const handleFieldServiceDaysUpdate = (days: FieldServiceDay[]) => {
+    setLocalSettings(prev => ({ ...prev, fieldServiceDays: days }));
   };
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -312,6 +512,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const currentTargets = serviceTypeHasRequirements 
     ? getServiceTypeTargets(profile.service_type)
     : { monthlyTarget: localSettings.monthlyTarget, yearlyTarget: localSettings.yearlyTarget };
+
+  const getServiceTypeIcon = (type: string) => {
+    switch (type) {
+      case 'h2h_rv': return <MapPin size={16} className="text-blue-600" />;
+      case 'cart': return <ShoppingCart size={16} className="text-purple-600" />;
+      default: return null;
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -438,86 +646,43 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <h3 className="text-lg font-semibold text-gray-800">Field Service Days</h3>
           </div>
           <button
-            onClick={addFieldServiceDay}
+            onClick={() => setShowFieldServiceModal(true)}
             className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-600 px-3 py-2 rounded-lg transition-colors"
           >
-            <Plus size={16} />
-            <span className="text-sm font-medium">Add Day</span>
+            <Edit size={16} />
+            <span className="text-sm font-medium">Edit</span>
           </button>
         </div>
         
-        <p className="text-sm text-gray-600 mb-4">
-          Configure your typical field service days with expected hours for better scheduling suggestions:
-        </p>
-        
-        <div className="space-y-4">
-          {localSettings.fieldServiceDays.map((fieldDay, index) => (
-            <div key={index} className="bg-gray-50 rounded-xl p-4">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
-                  <select
-                    value={fieldDay.day}
-                    onChange={(e) => updateFieldServiceDay(index, { 
-                      day: parseInt(e.target.value),
-                      label: `${dayNames[parseInt(e.target.value)]} - ${fieldDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
-                    })}
-                    className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    {dayNames.map((day, dayIndex) => (
-                      <option key={dayIndex} value={dayIndex}>{day}</option>
-                    ))}
-                  </select>
+        {localSettings.fieldServiceDays.length > 0 ? (
+          <div className="grid gap-3">
+            {localSettings.fieldServiceDays.map((fieldDay, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  {getServiceTypeIcon(fieldDay.type)}
+                  <div>
+                    <p className="font-medium text-gray-800">
+                      {dayNames[fieldDay.day]}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Ministry'}
+                    </p>
+                  </div>
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                  <select
-                    value={fieldDay.type}
-                    onChange={(e) => updateFieldServiceDay(index, { 
-                      type: e.target.value as 'h2h_rv' | 'cart',
-                      label: `${dayNames[fieldDay.day]} - ${e.target.value === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Ministry'}`
-                    })}
-                    className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="h2h_rv">House to House / Return Visits</option>
-                    <option value="cart">Cart Ministry</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Potential Hours</label>
-                  <input
-                    type="number"
-                    min="0.5"
-                    max="12"
-                    step="0.5"
-                    value={fieldDay.potentialHours}
-                    onChange={(e) => updateFieldServiceDay(index, { potentialHours: parseFloat(e.target.value) || 1 })}
-                    className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                
-                <div className="flex items-end">
-                  <button
-                    onClick={() => removeFieldServiceDay(index)}
-                    className="w-full p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                <div className="text-right">
+                  <p className="font-semibold text-gray-800">{fieldDay.potentialHours}h</p>
+                  <p className="text-xs text-gray-500">potential</p>
                 </div>
               </div>
-            </div>
-          ))}
-          
-          {localSettings.fieldServiceDays.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-              <p>No field service days configured</p>
-              <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+            <p className="font-medium">No field service days configured</p>
+            <p className="text-sm">Click Edit to add your typical field service days</p>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
@@ -565,6 +730,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           onUploadAvatar={onUploadAvatar}
         />
       )}
+
+      {/* Edit Field Service Days Modal */}
+      <EditFieldServiceDaysModal
+        fieldServiceDays={localSettings.fieldServiceDays}
+        isOpen={showFieldServiceModal}
+        onClose={() => setShowFieldServiceModal(false)}
+        onSave={handleFieldServiceDaysUpdate}
+      />
     </div>
   );
 };

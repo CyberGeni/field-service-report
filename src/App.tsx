@@ -10,6 +10,7 @@ import SignInForm from './components/auth/SignInForm';
 import SignUpForm from './components/auth/SignUpForm';
 import ForgotPasswordForm from './components/auth/ForgotPasswordForm';
 import ProfileSetup from './components/ProfileSetup';
+import { ToastProvider } from './components/ui/toast';
 import { useStorage } from './hooks/useStorage';
 import { useTimer } from './hooks/useTimer';
 import { useAuth } from './hooks/useAuth';
@@ -166,21 +167,23 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 pb-20">
-      <div className="max-w-md mx-auto">
-        {/* Main Content */}
-        <main className="p-6 pt-8">
-          {renderActiveTab()}
-        </main>
+    <ToastProvider>
+      <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 pb-20">
+        <div className="max-w-md mx-auto">
+          {/* Main Content */}
+          <main className="p-6 pt-8">
+            {renderActiveTab()}
+          </main>
 
-        {/* Navigation with timer indicator */}
-        <Navigation 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab}
-          timerRunning={timerState.isRunning && !timerState.isPaused}
-        />
+          {/* Navigation with timer indicator */}
+          <Navigation 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab}
+            timerRunning={timerState.isRunning && !timerState.isPaused}
+          />
+        </div>
       </div>
-    </div>
+    </ToastProvider>
   );
 }
 

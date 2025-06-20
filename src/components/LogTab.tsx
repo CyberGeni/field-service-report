@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Clock, Plus, MapPin, Car, ShoppingCart } from 'lucide-react';
 import { ServiceRecord, TimerState } from '../types';
 import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
+import { useToast } from './ui/toast';
 import Timer from './Timer';
 
 interface LogTabProps {
@@ -28,6 +29,7 @@ const LogTab: React.FC<LogTabProps> = ({
   const [manualMinutes, setManualMinutes] = useState(0);
   const [selectedDate, setSelectedDate] = useState(getDateString(new Date()));
   const [notes, setNotes] = useState('');
+  const { addToast } = useToast();
 
   const today = new Date();
   const isToday = selectedDate === getDateString(today);
@@ -69,8 +71,17 @@ const LogTab: React.FC<LogTabProps> = ({
       onSaveRecord(timerRecord);
       setNotes('');
       
-      // Show success message or feedback
-      console.log(`Timer stopped: ${hours}h ${minutes}m logged for ${getDateString(new Date())}`);
+      addToast({
+        type: 'success',
+        title: 'Time Logged',
+        description: `${hours}h ${minutes}m recorded for ${getDateString(new Date())}`
+      });
+    } else {
+      addToast({
+        type: 'info',
+        title: 'Timer Stopped',
+        description: 'No time was recorded (timer was too short)'
+      });
     }
   };
 
@@ -86,6 +97,12 @@ const LogTab: React.FC<LogTabProps> = ({
     
     onSaveRecord(record);
     setNotes('');
+    
+    addToast({
+      type: 'success',
+      title: 'Entry Added',
+      description: `${hours}h ${minutes}m logged for ${new Date(selectedDate).toLocaleDateString()}`
+    });
   };
 
   const handleManualSave = () => {
@@ -93,6 +110,12 @@ const LogTab: React.FC<LogTabProps> = ({
       saveRecord(manualHours, manualMinutes);
       setManualHours(0);
       setManualMinutes(0);
+    } else {
+      addToast({
+        type: 'error',
+        title: 'Invalid Entry',
+        description: 'Please enter at least some time before saving'
+      });
     }
   };
 
