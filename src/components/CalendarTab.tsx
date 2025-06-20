@@ -28,135 +28,76 @@ const EntryModal: React.FC<EntryModalProps> = ({
   selectedDate,
   existingRecords
 }) => {
-  // State for both service types
-  const [h2hHours, setH2hHours] = useState('');
-  const [h2hMinutes, setH2hMinutes] = useState('');
-  const [h2hNotes, setH2hNotes] = useState('');
-  
-  const [cartHours, setCartHours] = useState('');
-  const [cartMinutes, setCartMinutes] = useState('');
-  const [cartNotes, setCartNotes] = useState('');
-
+  const [selectedType, setSelectedType] = useState<'h2h' | 'cart'>('h2h');
+  const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const [notes, setNotes] = useState('');
   const { addToast } = useToast();
 
   React.useEffect(() => {
     if (isOpen) {
-      // Load existing records for both types
-      const h2hRecord = existingRecords.find(r => r.type === 'h2h');
-      const cartRecord = existingRecords.find(r => r.type === 'cart');
+      // Load existing record for the selected type
+      const existingRecord = existingRecords.find(r => r.type === selectedType);
       
-      // Set H2H values
-      if (h2hRecord) {
-        setH2hHours(h2hRecord.hours.toString());
-        setH2hMinutes(h2hRecord.minutes.toString());
-        setH2hNotes(h2hRecord.notes || '');
+      if (existingRecord) {
+        setHours(existingRecord.hours.toString());
+        setMinutes(existingRecord.minutes.toString());
+        setNotes(existingRecord.notes || '');
       } else {
-        setH2hHours('');
-        setH2hMinutes('');
-        setH2hNotes('');
-      }
-      
-      // Set Cart values
-      if (cartRecord) {
-        setCartHours(cartRecord.hours.toString());
-        setCartMinutes(cartRecord.minutes.toString());
-        setCartNotes(cartRecord.notes || '');
-      } else {
-        setCartHours('');
-        setCartMinutes('');
-        setCartNotes('');
+        setHours('');
+        setMinutes('');
+        setNotes('');
       }
     }
-  }, [isOpen, existingRecords]);
+  }, [isOpen, existingRecords, selectedType]);
 
   const handleSave = async () => {
-    const h2hHoursNum = parseInt(h2hHours) || 0;
-    const h2hMinutesNum = parseInt(h2hMinutes) || 0;
-    const cartHoursNum = parseInt(cartHours) || 0;
-    const cartMinutesNum = parseInt(cartMinutes) || 0;
-
-    const h2hRecord = existingRecords.find(r => r.type === 'h2h');
-    const cartRecord = existingRecords.find(r => r.type === 'cart');
-
-    let savedCount = 0;
-    let deletedCount = 0;
+    const hoursNum = parseInt(hours) || 0;
+    const minutesNum = parseInt(minutes) || 0;
+    const existingRecord = existingRecords.find(r => r.type === selectedType);
 
     try {
-      // Handle H2H record
-      if (h2hHoursNum === 0 && h2hMinutesNum === 0) {
-        // Delete H2H record if it exists
-        if (h2hRecord && onDelete) {
-          await onDelete(h2hRecord.id);
-          deletedCount++;
+      if (hoursNum === 0 && minutesNum === 0) {
+        // Delete record if it exists
+        if (existingRecord && onDelete) {
+          await onDelete(existingRecord.id);
+          addToast({
+            type: 'success',
+            title: 'Entry Deleted',
+            description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record deleted for ${new Date(selectedDate).toLocaleDateString()}`
+          });
+        } else {
+          addToast({
+            type: 'info',
+            title: 'No Changes',
+            description: 'No time was entered and no existing record to delete'
+          });
         }
       } else {
-        // Save/update H2H record
+        // Save/update record
         const record: ServiceRecord = {
-          id: h2hRecord?.id || crypto.randomUUID(),
+          id: existingRecord?.id || crypto.randomUUID(),
           date: selectedDate,
-          hours: h2hHoursNum,
-          minutes: h2hMinutesNum,
-          type: 'h2h',
-          notes: h2hNotes.trim() || undefined
+          hours: hoursNum,
+          minutes: minutesNum,
+          type: selectedType,
+          notes: notes.trim() || undefined
         };
+        
         await onSave(record);
-        savedCount++;
-      }
-
-      // Handle Cart record
-      if (cartHoursNum === 0 && cartMinutesNum === 0) {
-        // Delete Cart record if it exists
-        if (cartRecord && onDelete) {
-          await onDelete(cartRecord.id);
-          deletedCount++;
-        }
-      } else {
-        // Save/update Cart record
-        const record: ServiceRecord = {
-          id: cartRecord?.id || crypto.randomUUID(),
-          date: selectedDate,
-          hours: cartHoursNum,
-          minutes: cartMinutesNum,
-          type: 'cart',
-          notes: cartNotes.trim() || undefined
-        };
-        await onSave(record);
-        savedCount++;
-      }
-
-      // Show appropriate toast message
-      if (savedCount > 0 && deletedCount > 0) {
         addToast({
           type: 'success',
-          title: 'Entries Updated',
-          description: `${savedCount} record(s) saved, ${deletedCount} record(s) deleted for ${new Date(selectedDate).toLocaleDateString()}`
-        });
-      } else if (savedCount > 0) {
-        addToast({
-          type: 'success',
-          title: 'Entries Saved',
-          description: `${savedCount} record(s) saved for ${new Date(selectedDate).toLocaleDateString()}`
-        });
-      } else if (deletedCount > 0) {
-        addToast({
-          type: 'success',
-          title: 'Entries Deleted',
-          description: `${deletedCount} record(s) deleted for ${new Date(selectedDate).toLocaleDateString()}`
-        });
-      } else {
-        addToast({
-          type: 'info',
-          title: 'No Changes',
-          description: 'No time was entered for either service type'
+          title: existingRecord ? 'Entry Updated' : 'Entry Added',
+          description: `${hoursNum}h ${minutesNum}m logged for ${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} on ${new Date(selectedDate).toLocaleDateString()}`
         });
       }
-
+      
       onClose();
     } catch (error) {
       addToast({
         type: 'error',
         title: 'Save Failed',
-        description: 'Failed to save service records'
+        description: 'Failed to save service record'
       });
     }
   };
@@ -192,103 +133,108 @@ const EntryModal: React.FC<EntryModalProps> = ({
             </button>
           </div>
 
-          <div className="space-y-6">
-            {/* House to House Section */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="flex items-center space-x-2 mb-4">
-                <Briefcase size={20} className="text-blue-600" />
-                <h4 className="font-semibold text-blue-800">House to House / Return Visits</h4>
+          <div className="space-y-4">
+            {/* Service Type Tabs */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: 'h2h', label: 'House to House', subtitle: 'Door-to-door & return visits', icon: Briefcase, color: 'blue' },
+                  { id: 'cart', label: 'Cart Witnessing', subtitle: 'Public witnessing', icon: BaggageClaim, color: 'purple' }
+                ].map(({ id, label, subtitle, icon: Icon, color }) => (
+                  <button
+                    key={id}
+                    onClick={() => setSelectedType(id as 'h2h' | 'cart')}
+                    className={`p-4 rounded-xl transition-all duration-200 border-2 text-left ${
+                      selectedType === id
+                        ? `bg-${color}-50 text-${color}-700 border-${color}-200`
+                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex flex-col items-center text-center space-y-2">
+                      <div className={`p-2 rounded-lg ${
+                        selectedType === id
+                          ? `bg-${color}-100`
+                          : 'bg-white'
+                      }`}>
+                        <Icon size={24} />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-sm">{label}</div>
+                        <div className="text-xs opacity-75 mt-1">{subtitle}</div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
               </div>
-              
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className="block text-sm font-medium text-blue-700 mb-1">Hours</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="24"
-                    value={h2hHours}
-                    onChange={(e) => setH2hHours(e.target.value)}
-                    className="w-full p-2 bg-white rounded-lg border border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-blue-700 mb-1">Minutes</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={h2hMinutes}
-                    onChange={(e) => setH2hMinutes(e.target.value)}
-                    className="w-full p-2 bg-white rounded-lg border border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-              
+            </div>
+
+            {/* Time Input */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-blue-700 mb-1">Notes (optional)</label>
-                <textarea
-                  value={h2hNotes}
-                  onChange={(e) => setH2hNotes(e.target.value)}
-                  placeholder="Add notes about house to house service..."
-                  className="w-full p-2 bg-white rounded-lg border border-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors resize-none"
-                  rows={2}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Hours</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                  className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Minutes</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={minutes}
+                  onChange={(e) => setMinutes(e.target.value)}
+                  className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
+                  placeholder="0"
                 />
               </div>
             </div>
 
-            {/* Cart Witnessing Section */}
-            <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
-              <div className="flex items-center space-x-2 mb-4">
-                <BaggageClaim size={20} className="text-purple-600" />
-                <h4 className="font-semibold text-purple-800">Cart Witnessing</h4>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label className="block text-sm font-medium text-purple-700 mb-1">Hours</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="24"
-                    value={cartHours}
-                    onChange={(e) => setCartHours(e.target.value)}
-                    className="w-full p-2 bg-white rounded-lg border border-purple-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
-                    placeholder="0"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-purple-700 mb-1">Minutes</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={cartMinutes}
-                    onChange={(e) => setCartMinutes(e.target.value)}
-                    className="w-full p-2 bg-white rounded-lg border border-purple-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-purple-700 mb-1">Notes (optional)</label>
-                <textarea
-                  value={cartNotes}
-                  onChange={(e) => setCartNotes(e.target.value)}
-                  placeholder="Add notes about cart witnessing..."
-                  className="w-full p-2 bg-white rounded-lg border border-purple-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-colors resize-none"
-                  rows={2}
-                />
-              </div>
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={`Add notes about your ${selectedType === 'h2h' ? 'house to house' : 'cart witnessing'} service...`}
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-none"
+                rows={3}
+              />
             </div>
+
+            {/* Current Records Summary */}
+            {existingRecords.length > 0 && (
+              <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Current Records for This Date:</h4>
+                <div className="space-y-1">
+                  {existingRecords.map(record => (
+                    <div key={record.id} className="flex items-center justify-between text-sm">
+                      <span className="flex items-center space-x-2">
+                        {record.type === 'h2h' ? (
+                          <Briefcase size={14} className="text-blue-600" />
+                        ) : (
+                          <BaggageClaim size={14} className="text-purple-600" />
+                        )}
+                        <span>{record.type === 'h2h' ? 'House to House' : 'Cart Witnessing'}</span>
+                      </span>
+                      <span className="font-medium">{record.hours}h {record.minutes}m</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Info about zero values */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
               <p className="text-yellow-800 text-sm">
-                💡 <strong>Tip:</strong> Enter 0 hours and 0 minutes to delete an existing record for that service type.
+                💡 <strong>Tip:</strong> Enter 0 hours and 0 minutes to delete the existing record for this service type.
               </p>
             </div>
           </div>
@@ -485,7 +431,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
         <p className="text-blue-800 text-sm font-medium">
-          💡 Click on any past or current day to record time for both service types. Enter 0 hours and 0 minutes to delete a record. Future dates are disabled.
+          💡 Click on any past or current day to record time. Switch between service types using the tabs. Enter 0 hours and 0 minutes to delete a record. Future dates are disabled.
         </p>
       </div>
 
