@@ -21,126 +21,83 @@ interface EditProfileModalProps {
   onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
 }
 
-interface EditFieldServiceDaysModalProps {
-  fieldServiceDays: FieldServiceDay[];
+interface EditFieldServiceDayModalProps {
+  fieldServiceDay: FieldServiceDay | null;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (days: FieldServiceDay[]) => void;
+  onSave: (day: FieldServiceDay) => void;
+  existingDays: FieldServiceDay[];
 }
 
-const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
-  fieldServiceDays,
+const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
+  fieldServiceDay,
   isOpen,
   onClose,
-  onSave
+  onSave,
+  existingDays
 }) => {
-  const [localDays, setLocalDays] = useState<FieldServiceDay[]>(fieldServiceDays);
+  const [localDay, setLocalDay] = useState<FieldServiceDay>(
+    fieldServiceDay || {
+      day: 0,
+      type: 'h2h_rv',
+      potentialHours: 2,
+      label: 'Sunday - House to House/Return Visits'
+    }
+  );
   const [error, setError] = useState('');
   const { addToast } = useToast();
 
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-  const addFieldServiceDay = () => {
-    // Find the first day that's not already configured
-    const usedDays = localDays.map(day => day.day);
-    const availableDay = [0, 1, 2, 3, 4, 5, 6].find(day => !usedDays.includes(day));
-    
-    if (availableDay === undefined) {
-      setError('All days of the week are already configured');
-      addToast({
-        type: 'error',
-        title: 'Cannot Add Day',
-        description: 'All days of the week are already configured'
-      });
-      return;
-    }
-
-    const newDay: FieldServiceDay = {
-      day: availableDay,
-      type: 'h2h_rv',
-      potentialHours: 2,
-      label: `${dayNames[availableDay]} - House to House/Return Visits`
-    };
-    
-    setLocalDays(prev => [...prev, newDay]);
-    setError('');
-  };
-
-  const updateFieldServiceDay = (index: number, updates: Partial<FieldServiceDay>) => {
-    setLocalDays(prev => prev.map((day, i) => {
-      if (i === index) {
-        const updatedDay = { ...day, ...updates };
-        
-        // Check for duplicate days when updating the day field
-        if (updates.day !== undefined) {
-          const otherDays = prev.filter((_, otherIndex) => otherIndex !== index);
-          const isDuplicate = otherDays.some(otherDay => otherDay.day === updates.day);
-          
-          if (isDuplicate) {
-            setError(`${dayNames[updates.day]} is already configured`);
-            addToast({
-              type: 'error',
-              title: 'Duplicate Day',
-              description: `${dayNames[updates.day]} is already configured`
-            });
-            return day; // Don't update if duplicate
-          } else {
-            setError('');
-          }
-        }
-        
-        // Update label when day or type changes
-        if (updates.day !== undefined || updates.type !== undefined) {
-          updatedDay.label = `${dayNames[updatedDay.day]} - ${updatedDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`;
-        }
-        
-        return updatedDay;
-      }
-      return day;
-    }));
-  };
-
-  const removeFieldServiceDay = (index: number) => {
-    setLocalDays(prev => prev.filter((_, i) => i !== index));
-    setError('');
-  };
-
   const handleSave = () => {
-    // Validate that all days have valid potential hours
-    const invalidDays = localDays.filter(day => !day.potentialHours || day.potentialHours <= 0);
-    
-    if (invalidDays.length > 0) {
-      setError('All days must have potential hours greater than 0');
+    // Validate potential hours
+    if (!localDay.potentialHours || localDay.potentialHours <= 0) {
+      setError('Hours must be greater than 0');
       addToast({
         type: 'error',
         title: 'Invalid Hours',
-        description: 'All days must have potential hours greater than 0'
+        description: 'Hours must be greater than 0'
       });
       return;
     }
 
-    onSave(localDays);
+    // Check for duplicate days (only if this is a new day or day changed)
+    if (!fieldServiceDay || fieldServiceDay.day !== localDay.day) {
+      const isDuplicate = existingDays.some(day => 
+        day.day === localDay.day && (!fieldServiceDay || day !== fieldServiceDay)
+      );
+      
+      if (isDuplicate) {
+        setError(`${dayNames[localDay.day]} is already configured`);
+        addToast({
+          type: 'error',
+          title: 'Duplicate Day',
+          description: `${dayNames[localDay.day]} is already configured`
+        });
+        return;
+      }
+    }
+
+    // Update label
+    const updatedDay = {
+      ...localDay,
+      label: `${dayNames[localDay.day]} - ${localDay.type === 'h2h_rv' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+    };
+
+    onSave(updatedDay);
     addToast({
       type: 'success',
-      title: 'Field Service Days Updated',
-      description: `${localDays.length} days configured successfully`
+      title: 'Day Updated',
+      description: `${dayNames[updatedDay.day]} configuration saved successfully`
     });
     onClose();
   };
 
-  const getServiceTypeIcon = (type: string) => {
-    switch (type) {
-      case 'h2h_rv': return <Briefcase size={16} className="text-blue-600" />;
-      case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
-      default: return null;
-    }
-  };
-
   // Get available days for dropdown
-  const getAvailableDays = (currentIndex: number) => {
-    const usedDays = localDays
-      .map((day, index) => index === currentIndex ? null : day.day)
-      .filter(day => day !== null);
+  const getAvailableDays = () => {
+    const usedDays = existingDays
+      .filter(day => !fieldServiceDay || day !== fieldServiceDay)
+      .map(day => day.day);
     
     return dayNames.map((name, index) => ({
       value: index,
@@ -153,11 +110,13 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-xl max-w-md w-full">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-800">Edit Field Service Days</h3>
+            <h3 className="text-lg font-semibold text-gray-800">
+              {fieldServiceDay ? 'Edit Field Service Day' : 'Add Field Service Day'}
+            </h3>
             <button
               onClick={onClose}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -173,110 +132,72 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
             </div>
           )}
 
-          <p className="text-sm text-gray-600 mb-6">
-            Configure your typical field service days with expected hours for better scheduling suggestions.
-          </p>
-          
-          <div className="space-y-4 mb-6">
-            {localDays.map((fieldDay, index) => (
-              <div key={index} className="bg-gray-50 rounded-xl p-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Day</label>
-                    <select
-                      value={fieldDay.day}
-                      onChange={(e) => updateFieldServiceDay(index, { 
-                        day: parseInt(e.target.value)
-                      })}
-                      className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      {getAvailableDays(index).map((option) => (
-                        <option 
-                          key={option.value} 
-                          value={option.value}
-                          disabled={option.disabled}
-                          className={option.disabled ? 'text-gray-400' : ''}
-                        >
-                          {option.label} {option.disabled ? '(already configured)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                    <select
-                      value={fieldDay.type}
-                      onChange={(e) => updateFieldServiceDay(index, { 
-                        type: e.target.value as 'h2h_rv' | 'cart'
-                      })}
-                      className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="h2h_rv">House to House / Return Visits</option>
-                      <option value="cart">Cart Witnessing</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Potential Hours</label>
-                    <input
-                      type="number"
-                      min="0.5"
-                      max="12"
-                      step="0.5"
-                      value={fieldDay.potentialHours || ''}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        if (value === '') {
-                          updateFieldServiceDay(index, { potentialHours: 0 });
-                        } else {
-                          const numValue = parseFloat(value);
-                          if (!isNaN(numValue) && numValue >= 0.5) {
-                            updateFieldServiceDay(index, { potentialHours: numValue });
-                          }
-                        }
-                      }}
-                      placeholder="Enter hours"
-                      className="w-full p-2 bg-white rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                  </div>
-                  
-                  <div className="flex items-end">
-                    <button
-                      onClick={() => removeFieldServiceDay(index)}
-                      className="w-full p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors flex items-center justify-center"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Day of Week</label>
+              <select
+                value={localDay.day}
+                onChange={(e) => setLocalDay(prev => ({ 
+                  ...prev, 
+                  day: parseInt(e.target.value)
+                }))}
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {getAvailableDays().map((option) => (
+                  <option 
+                    key={option.value} 
+                    value={option.value}
+                    disabled={option.disabled}
+                    className={option.disabled ? 'text-gray-400' : ''}
+                  >
+                    {option.label} {option.disabled ? '(already configured)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
             
-            {localDays.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-                <p>No field service days configured</p>
-                <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between mb-6">
-            <button
-              onClick={addFieldServiceDay}
-              disabled={localDays.length >= 7}
-              className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 disabled:bg-gray-100 disabled:text-gray-400 text-purple-600 px-4 py-2 rounded-lg transition-colors"
-            >
-              <Plus size={16} />
-              <span className="font-medium">
-                {localDays.length >= 7 ? 'All Days Configured' : 'Add Day'}
-              </span>
-            </button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Service Type</label>
+              <select
+                value={localDay.type}
+                onChange={(e) => setLocalDay(prev => ({ 
+                  ...prev, 
+                  type: e.target.value as 'h2h_rv' | 'cart'
+                }))}
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="h2h_rv">House to House / Return Visits</option>
+                <option value="cart">Cart Witnessing</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Hours</label>
+              <input
+                type="number"
+                min="0.5"
+                max="12"
+                step="0.5"
+                value={localDay.potentialHours || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '') {
+                    setLocalDay(prev => ({ ...prev, potentialHours: 0 }));
+                  } else {
+                    const numValue = parseFloat(value);
+                    if (!isNaN(numValue) && numValue >= 0.5) {
+                      setLocalDay(prev => ({ ...prev, potentialHours: numValue }));
+                    }
+                  }
+                }}
+                placeholder="Enter hours"
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
           </div>
 
           {/* Actions */}
-          <div className="flex space-x-3">
+          <div className="flex space-x-3 mt-6">
             <button
               onClick={onClose}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
@@ -285,10 +206,10 @@ const EditFieldServiceDaysModal: React.FC<EditFieldServiceDaysModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={localDays.some(day => !day.potentialHours || day.potentialHours <= 0)}
+              disabled={!localDay.potentialHours || localDay.potentialHours <= 0}
               className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors"
             >
-              Save Changes
+              {fieldServiceDay ? 'Save Changes' : 'Add Day'}
             </button>
           </div>
         </div>
@@ -547,6 +468,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [signingOut, setSigningOut] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
+  const [editingFieldServiceDay, setEditingFieldServiceDay] = useState<FieldServiceDay | null>(null);
   const { addToast } = useToast();
 
   const handleSignOut = async () => {
@@ -576,17 +498,62 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const handleFieldServiceDaysUpdate = async (days: FieldServiceDay[]) => {
+  const handleEditFieldServiceDay = (day: FieldServiceDay) => {
+    setEditingFieldServiceDay(day);
+    setShowFieldServiceModal(true);
+  };
+
+  const handleAddFieldServiceDay = () => {
+    setEditingFieldServiceDay(null);
+    setShowFieldServiceModal(true);
+  };
+
+  const handleDeleteFieldServiceDay = async (dayToDelete: FieldServiceDay) => {
     try {
-      const updatedSettings = { ...localSettings, fieldServiceDays: days };
+      const updatedDays = localSettings.fieldServiceDays.filter(day => day !== dayToDelete);
+      const updatedSettings = { ...localSettings, fieldServiceDays: updatedDays };
+      setLocalSettings(updatedSettings);
+      await onUpdateSettings(updatedSettings);
+      
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      addToast({
+        type: 'success',
+        title: 'Day Removed',
+        description: `${dayNames[dayToDelete.day]} has been removed from your field service days`
+      });
+    } catch (error) {
+      console.error('Error deleting field service day:', error);
+      addToast({
+        type: 'error',
+        title: 'Delete Failed',
+        description: 'Failed to remove field service day'
+      });
+    }
+  };
+
+  const handleFieldServiceDayUpdate = async (updatedDay: FieldServiceDay) => {
+    try {
+      let updatedDays;
+      
+      if (editingFieldServiceDay) {
+        // Update existing day
+        updatedDays = localSettings.fieldServiceDays.map(day => 
+          day === editingFieldServiceDay ? updatedDay : day
+        );
+      } else {
+        // Add new day
+        updatedDays = [...localSettings.fieldServiceDays, updatedDay];
+      }
+      
+      const updatedSettings = { ...localSettings, fieldServiceDays: updatedDays };
       setLocalSettings(updatedSettings);
       await onUpdateSettings(updatedSettings);
     } catch (error) {
-      console.error('Error updating field service days:', error);
+      console.error('Error updating field service day:', error);
       addToast({
         type: 'error',
         title: 'Update Failed',
-        description: 'Failed to save field service days'
+        description: 'Failed to save field service day'
       });
     }
   };
@@ -640,14 +607,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const currentTargets = serviceTypeHasRequirements 
     ? getServiceTypeTargets(profile.service_type)
     : { monthlyTarget: localSettings.monthlyTarget, yearlyTarget: localSettings.yearlyTarget };
-
-  const getServiceTypeIcon = (type: string) => {
-    switch (type) {
-      case 'h2h_rv': return <Briefcase size={16} className="text-blue-600" />;
-      case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
-      default: return null;
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -792,11 +751,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <h3 className="text-lg font-semibold text-gray-800">Field Service Days</h3>
           </div>
           <button
-            onClick={() => setShowFieldServiceModal(true)}
-            className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-600 px-3 py-2 rounded-lg transition-colors"
+            onClick={handleAddFieldServiceDay}
+            disabled={localSettings.fieldServiceDays.length >= 7}
+            className="flex items-center space-x-2 bg-purple-50 hover:bg-purple-100 disabled:bg-gray-100 disabled:text-gray-400 text-purple-600 px-3 py-2 rounded-lg transition-colors"
           >
-            <Edit size={16} />
-            <span className="text-sm font-medium">Edit</span>
+            <Plus size={16} />
+            <span className="text-sm font-medium">
+              {localSettings.fieldServiceDays.length >= 7 ? 'All Days Added' : 'Add Day'}
+            </span>
           </button>
         </div>
         
@@ -804,20 +766,29 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="grid gap-3">
             {localSettings.fieldServiceDays.map((fieldDay, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  {getServiceTypeIcon(fieldDay.type)}
-                  <div>
-                    <p className="font-medium text-gray-800">
-                      {dayNames[fieldDay.day]}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Witnessing'}
-                    </p>
-                  </div>
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800">
+                    {dayNames[fieldDay.day]}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {fieldDay.type === 'h2h_rv' ? 'House to House / Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
+                  </p>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold text-gray-800">{fieldDay.potentialHours}h</p>
-                  <p className="text-xs text-gray-500">potential</p>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleEditFieldServiceDay(fieldDay)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="Edit day"
+                  >
+                    <Edit size={16} />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteFieldServiceDay(fieldDay)}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Delete day"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
             ))}
@@ -826,7 +797,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="text-center py-8 text-gray-500">
             <Calendar size={48} className="mx-auto mb-4 opacity-50" />
             <p className="font-medium">No field service days configured</p>
-            <p className="text-sm">Click Edit to add your typical field service days</p>
+            <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
           </div>
         )}
       </div>
@@ -842,12 +813,16 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         />
       )}
 
-      {/* Edit Field Service Days Modal */}
-      <EditFieldServiceDaysModal
-        fieldServiceDays={localSettings.fieldServiceDays}
+      {/* Edit Field Service Day Modal */}
+      <EditFieldServiceDayModal
+        fieldServiceDay={editingFieldServiceDay}
         isOpen={showFieldServiceModal}
-        onClose={() => setShowFieldServiceModal(false)}
-        onSave={handleFieldServiceDaysUpdate}
+        onClose={() => {
+          setShowFieldServiceModal(false);
+          setEditingFieldServiceDay(null);
+        }}
+        onSave={handleFieldServiceDayUpdate}
+        existingDays={localSettings.fieldServiceDays}
       />
     </div>
   );
