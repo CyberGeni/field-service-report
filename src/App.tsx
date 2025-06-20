@@ -14,6 +14,7 @@ import { useStorage } from './hooks/useStorage';
 import { useTimer } from './hooks/useTimer';
 import { useAuth } from './hooks/useAuth';
 import { useProfile } from './hooks/useProfile';
+import { hasHourRequirement } from './utils/serviceTypes';
 
 type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 
@@ -38,9 +39,9 @@ function App() {
     }
   }, []);
 
-  // Update settings when profile changes (for service type targets)
+  // Update settings when profile changes (only for service types with requirements)
   useEffect(() => {
-    if (profile && profile.service_type) {
+    if (profile && profile.service_type && hasHourRequirement(profile.service_type)) {
       const defaultTargets = getDefaultTargets(profile.service_type);
       // Only update if current targets match old defaults (haven't been customized)
       if (settings.monthlyTarget === 10 || settings.monthlyTarget === 30 || settings.monthlyTarget === 50) {
@@ -108,12 +109,15 @@ function App() {
     }) => {
       await createProfile(profileData);
       
-      // Update settings with default targets for the selected service type
-      const defaultTargets = getDefaultTargets(profileData.service_type);
-      updateSettings({
-        monthlyTarget: defaultTargets.monthlyTarget,
-        yearlyTarget: defaultTargets.yearlyTarget
-      });
+      // Only update settings with default targets for service types with requirements
+      if (hasHourRequirement(profileData.service_type)) {
+        const defaultTargets = getDefaultTargets(profileData.service_type);
+        updateSettings({
+          monthlyTarget: defaultTargets.monthlyTarget,
+          yearlyTarget: defaultTargets.yearlyTarget
+        });
+      }
+      // For publishers, keep their existing custom targets
     };
 
     return (
