@@ -13,6 +13,43 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
+  const getErrorMessage = (error: AuthError): string => {
+    // Handle specific Supabase auth error codes and messages
+    const message = error.message.toLowerCase()
+    
+    if (message.includes('user not found') || 
+        message.includes('email not found') ||
+        message.includes('no user found')) {
+      return 'No account found with this email address. Please check the email or create a new account.'
+    }
+    
+    if (message.includes('invalid email')) {
+      return 'Please enter a valid email address.'
+    }
+    
+    if (message.includes('email rate limit exceeded') || 
+        message.includes('rate limit') ||
+        message.includes('too many requests')) {
+      return 'Too many password reset requests. Please wait a few minutes before trying again.'
+    }
+    
+    if (message.includes('network') || message.includes('fetch')) {
+      return 'Network error. Please check your internet connection and try again.'
+    }
+    
+    if (message.includes('service unavailable') || message.includes('temporarily unavailable')) {
+      return 'Password reset service is temporarily unavailable. Please try again later.'
+    }
+    
+    // For any other errors, show the original message if it's user-friendly
+    if (error.message && error.message.length < 100 && !error.message.includes('Error')) {
+      return error.message
+    }
+    
+    // Fallback for truly unexpected errors
+    return 'Unable to send password reset email. Please try again or contact support.'
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -33,12 +70,13 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
       const { error } = await onResetPassword(email)
       
       if (error) {
-        setError(error.message)
+        setError(getErrorMessage(error))
       } else {
         setSuccess(true)
       }
-    } catch (err) {
-      setError('An unexpected error occurred')
+    } catch (err: any) {
+      console.error('Password reset error:', err)
+      setError('An unexpected error occurred. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -88,9 +126,12 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Error */}
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
-              <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
-              <p className="text-red-700 text-sm">{error}</p>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+              <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-700 text-sm font-medium">Reset Failed</p>
+                <p className="text-red-600 text-sm mt-1">{error}</p>
+              </div>
             </div>
           )}
 

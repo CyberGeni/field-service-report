@@ -54,6 +54,54 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
     return Object.keys(newErrors).length === 0
   }
 
+  const getErrorMessage = (error: AuthError): string => {
+    // Handle specific Supabase auth error codes and messages
+    const message = error.message.toLowerCase()
+    
+    if (message.includes('user already registered') || 
+        message.includes('email already registered') ||
+        message.includes('email already exists') ||
+        message.includes('already been registered')) {
+      return 'An account with this email address already exists. Please sign in instead or use a different email.'
+    }
+    
+    if (message.includes('invalid email')) {
+      return 'Please enter a valid email address.'
+    }
+    
+    if (message.includes('weak password') || message.includes('password')) {
+      return 'Password is too weak. Please use at least 6 characters with uppercase, lowercase, and numbers.'
+    }
+    
+    if (message.includes('signup disabled') || message.includes('signups not allowed')) {
+      return 'New account registration is currently disabled. Please contact support.'
+    }
+    
+    if (message.includes('email rate limit exceeded') || message.includes('rate limit')) {
+      return 'Too many signup attempts. Please wait a few minutes before trying again.'
+    }
+    
+    if (message.includes('network') || message.includes('fetch')) {
+      return 'Network error. Please check your internet connection and try again.'
+    }
+    
+    if (message.includes('invalid') && message.includes('domain')) {
+      return 'Email domain is not allowed. Please use a different email address.'
+    }
+    
+    if (message.includes('captcha')) {
+      return 'Security verification failed. Please try again.'
+    }
+    
+    // For any other errors, show the original message if it's user-friendly
+    if (error.message && error.message.length < 100 && !error.message.includes('Error')) {
+      return error.message
+    }
+    
+    // Fallback for truly unexpected errors
+    return 'Unable to create account. Please try again or contact support if the problem persists.'
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -66,16 +114,15 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
       const { error } = await onSignUp(email, password)
       
       if (error) {
-        if (error.message.includes('User already registered')) {
-          setErrors({ general: 'An account with this email already exists' })
-        } else {
-          setErrors({ general: error.message })
-        }
+        setErrors({ general: getErrorMessage(error) })
       } else {
         setSuccess(true)
       }
-    } catch (err) {
-      setErrors({ general: 'An unexpected error occurred' })
+    } catch (err: any) {
+      console.error('Sign up error:', err)
+      setErrors({ 
+        general: 'An unexpected error occurred. Please try again.' 
+      })
     } finally {
       setLoading(false)
     }
@@ -125,9 +172,12 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* General Error */}
           {errors.general && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
-              <AlertCircle size={20} className="text-red-500 flex-shrink-0" />
-              <p className="text-red-700 text-sm">{errors.general}</p>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
+              <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-red-700 text-sm font-medium">Account Creation Failed</p>
+                <p className="text-red-600 text-sm mt-1">{errors.general}</p>
+              </div>
             </div>
           )}
 
