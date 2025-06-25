@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { User, Upload, Camera, AlertCircle } from 'lucide-react'
+import { User, Upload, Camera, AlertCircle, CheckCircle } from 'lucide-react'
 import { Profile } from '../types'
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes'
 
@@ -19,6 +19,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
   const [error, setError] = useState('')
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,11 +39,35 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
     }
 
     setAvatarFile(file)
+    setError('')
+    setUploadSuccess(false)
     
     // Create preview URL
     const previewUrl = URL.createObjectURL(file)
     setAvatarUrl(previewUrl)
-    setError('')
+
+    // Upload immediately
+    setUploading(true)
+    try {
+      console.log('Uploading avatar during profile setup...')
+      const { data: uploadedUrl, error: uploadError } = await onUploadAvatar(file)
+      
+      if (uploadError) {
+        console.error('Avatar upload failed:', uploadError)
+        setError('Failed to upload avatar: ' + uploadError.message)
+        // Keep the preview URL so user can still see their selection
+      } else if (uploadedUrl) {
+        console.log('Avatar uploaded successfully:', uploadedUrl)
+        setAvatarUrl(uploadedUrl)
+        setUploadSuccess(true)
+        setError('')
+      }
+    } catch (err: any) {
+      console.error('Avatar upload error:', err)
+      setError('Failed to upload avatar')
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,30 +81,16 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
     setError('')
     
     try {
-      let finalAvatarUrl = avatarUrl
-
-      // Upload avatar if one was selected
-      if (avatarFile) {
-        setUploading(true)
-        const { data: uploadedUrl, error: uploadError } = await onUploadAvatar(avatarFile)
-        
-        if (uploadError) {
-          setError('Failed to upload avatar: ' + uploadError.message)
-          return
-        }
-        
-        finalAvatarUrl = uploadedUrl
-      }
+      // If we have an uploaded avatar URL, use it; otherwise use null
+      const finalAvatarUrl = uploadSuccess && avatarUrl ? avatarUrl : undefined
 
       await onComplete({
         name: name.trim(),
         service_type: serviceType,
-        avatar_url: finalAvatarUrl || undefined
+        avatar_url: finalAvatarUrl
       })
     } catch (err: any) {
       setError(err.message || 'Failed to create profile')
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -120,6 +131,10 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
                     src={avatarUrl}
                     alt="Profile"
                     className="w-full h-full object-cover"
+                    onError={(e) => {
+                      console.warn('Profile preview image failed to load')
+                      // Don't reset avatarUrl here to avoid infinite loops
+                    }}
                   />
                 ) : (
                   <User size={32} className="text-gray-400" />
@@ -135,10 +150,26 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
                   disabled={loading || uploading}
                 />
               </label>
+              {uploading && (
+                <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+              {uploadSuccess && (
+                <div className="absolute -top-2 -right-2 bg-green-500 text-white rounded-full p-1">
+                  <CheckCircle size={16} />
+                </div>
+              )}
             </div>
             <p className="text-sm text-gray-500 mt-2">
               Click the camera icon to upload a profile picture
             </p>
+            {uploading && (
+              <p className="text-sm text-blue-600 mt-1">Uploading...</p>
+            )}
+            {uploadSuccess && (
+              <p className="text-sm text-green-600 mt-1">✓ Avatar uploaded successfully</p>
+            )}
           </div>
 
           {/* Name */}
