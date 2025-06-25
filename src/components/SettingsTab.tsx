@@ -251,6 +251,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [imageKey, setImageKey] = useState(0); // Force re-render of image
   const { addToast } = useToast();
 
   // Reset local profile when modal opens or profile changes
@@ -260,6 +261,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
       setImageError(false);
       setUploadSuccess(false);
       setError('');
+      setImageKey(prev => prev + 1); // Force image refresh
     }
   }, [isOpen, profile]);
 
@@ -303,6 +305,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
         console.log('Avatar uploaded successfully:', avatarUrl);
         setLocalProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
         setUploadSuccess(true);
+        setImageKey(prev => prev + 1); // Force image refresh
         addToast({
           type: 'success',
           title: 'Avatar Uploaded',
@@ -395,6 +398,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                 <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                   {localProfile.avatar_url && !imageError ? (
                     <img
+                      key={imageKey} // Force re-render when key changes
                       src={localProfile.avatar_url}
                       alt={localProfile.name}
                       className="w-full h-full object-cover rounded-full"
@@ -537,7 +541,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
   const [editingFieldServiceDay, setEditingFieldServiceDay] = useState<FieldServiceDay | null>(null);
   const [imageError, setImageError] = useState(false);
+  const [imageKey, setImageKey] = useState(0); // Force re-render of image
   const { addToast } = useToast();
+
+  // Update image key when profile avatar changes
+  useEffect(() => {
+    setImageKey(prev => prev + 1);
+    setImageError(false);
+  }, [profile?.avatar_url]);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -709,6 +720,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
               {profile.avatar_url && !imageError ? (
                 <img
+                  key={imageKey} // Force re-render when key changes
                   src={profile.avatar_url}
                   alt={profile.name}
                   className="w-full h-full object-cover rounded-full"

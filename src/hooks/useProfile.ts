@@ -176,12 +176,14 @@ export function useProfile(user: any) {
 
       console.log('File uploaded successfully to storage:', uploadData)
 
-      // Get the public URL
+      // Get the public URL with cache busting
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName)
 
-      console.log('Generated public URL:', publicUrl)
+      // Add cache busting parameter to ensure fresh image loads
+      const cacheBustedUrl = `${publicUrl}?t=${timestamp}`
+      console.log('Generated cache-busted public URL:', cacheBustedUrl)
 
       // Test the URL accessibility
       try {
@@ -195,8 +197,8 @@ export function useProfile(user: any) {
         console.warn('Could not verify avatar URL accessibility:', fetchError)
       }
 
-      // Return the clean URL without cache busting for storage
-      return { data: publicUrl, error: null }
+      // Return the cache-busted URL
+      return { data: cacheBustedUrl, error: null }
     } catch (err: any) {
       console.error('Avatar upload error:', err)
       return { data: null, error: err }
