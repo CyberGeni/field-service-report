@@ -466,7 +466,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
       </div>
 
       {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-xl p-2">
         <p className="text-blue-800 text-sm font-medium">
           💡 Click on any past or current day to record time.
         </p>
