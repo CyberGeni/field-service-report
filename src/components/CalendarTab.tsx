@@ -165,7 +165,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { id: 'h2h', label: 'House to House', subtitle: 'Door-to-door & return visits', icon: Briefcase, color: 'blue' },
-                  { id: 'cart', label: 'Cart Witnessing', subtitle: 'Public witnessing', icon: BaggageClaim, color: 'pink' }
+                  { id: 'cart', label: 'Cart Witnessing', subtitle: 'Public witnessing', icon: BaggageClaim, color: 'purple' }
                 ].map(({ id, label, subtitle, icon: Icon, color }) => (
                   <button
                     key={id}
