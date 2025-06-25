@@ -10,7 +10,6 @@ import SignInForm from './components/auth/SignInForm';
 import SignUpForm from './components/auth/SignUpForm';
 import ForgotPasswordForm from './components/auth/ForgotPasswordForm';
 import ProfileSetup from './components/ProfileSetup';
-import DebugSettings from './components/DebugSettings';
 import { ToastProvider } from './components/ui/toast';
 import { useStorage } from './hooks/useStorage';
 import { useTimer } from './hooks/useTimer';
@@ -23,7 +22,7 @@ type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [authView, setAuthView] = useState<AuthView>('splash');
-  const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings } = useStorage();
+  const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings, forceRefresh } = useStorage();
   const { timerState, startTimer, pauseTimer, stopTimer } = useTimer();
   const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
   const { profile, loading: profileLoading, createProfile, updateProfile, uploadAvatar, getDefaultTargets } = useProfile(user);
@@ -159,7 +158,8 @@ function App() {
             onUpdateSettings={updateSettings} 
             onUpdateProfile={updateProfile}
             onUploadAvatar={uploadAvatar}
-            onSignOut={signOut} 
+            onSignOut={signOut}
+            onForceRefresh={forceRefresh}
           />
         );
       default:
@@ -182,9 +182,6 @@ function App() {
             onTabChange={setActiveTab}
             timerRunning={timerState.isRunning && !timerState.isPaused}
           />
-
-          {/* Debug component - only show in development */}
-          {import.meta.env.DEV && <DebugSettings />}
         </div>
       </div>
     </ToastProvider>

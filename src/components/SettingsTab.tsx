@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim } from 'lucide-react';
+import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim, RefreshCw } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 import { useToast } from './ui/toast';
@@ -11,6 +11,7 @@ interface SettingsTabProps {
   onUpdateProfile?: (updates: Partial<Profile>) => Promise<void>;
   onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
   onSignOut: () => Promise<{ error: any }>;
+  onForceRefresh?: () => Promise<void>;
 }
 
 interface EditProfileModalProps {
@@ -482,14 +483,44 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   onUpdateSettings, 
   onUpdateProfile,
   onUploadAvatar,
-  onSignOut 
+  onSignOut,
+  onForceRefresh
 }) => {
   const [localSettings, setLocalSettings] = useState(settings);
   const [signingOut, setSigningOut] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
   const [editingFieldServiceDay, setEditingFieldServiceDay] = useState<FieldServiceDay | null>(null);
   const { addToast } = useToast();
+
+  // Update local settings when props change
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  const handleForceRefresh = async () => {
+    if (!onForceRefresh) return;
+    
+    setRefreshing(true);
+    try {
+      await onForceRefresh();
+      addToast({
+        type: 'success',
+        title: 'Data Refreshed',
+        description: 'Settings have been synchronized with the server'
+      });
+    } catch (error) {
+      console.error('Force refresh error:', error);
+      addToast({
+        type: 'error',
+        title: 'Refresh Failed',
+        description: 'Failed to refresh data from server'
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -630,6 +661,33 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Sync Status & Refresh */}
+      <div className="bg-white rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <RefreshCw size={24} className="text-green-500" />
+            <h3 className="text-lg font-semibold text-gray-800">Data Sync</h3>
+          </div>
+          <button
+            onClick={handleForceRefresh}
+            disabled={refreshing}
+            className="flex items-center space-x-2 bg-green-50 hover:bg-green-100 disabled:bg-gray-100 text-green-600 disabled:text-gray-400 px-3 py-2 rounded-lg transition-colors"
+          >
+            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            <span className="text-sm font-medium">
+              {refreshing ? 'Syncing...' : 'Sync Now'}
+            </span>
+          </button>
+        </div>
+        
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+          <p className="text-green-800 text-sm">
+            <strong>Multi-device sync:</strong> Your settings are automatically synchronized across all your devices. 
+            If you notice any inconsistencies, use the "Sync Now" button to force a refresh.
+          </p>
+        </div>
+      </div>
+
       {/* Profile Display Section */}
       {profile && (
         <div className="bg-white rounded-xl p-6">
