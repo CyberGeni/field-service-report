@@ -43,46 +43,70 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
   }
 
   const getErrorMessage = (error: AuthError): string => {
-    // Handle specific Supabase auth error codes and messages
-    const message = error.message.toLowerCase()
+    console.log('Auth error details:', error)
     
+    // Handle specific Supabase auth error codes and messages
+    const message = error.message?.toLowerCase() || ''
+    
+    // Check for invalid credentials - this is the most common error
     if (message.includes('invalid login credentials') || 
         message.includes('invalid email or password') ||
-        message.includes('email not confirmed')) {
+        message.includes('email not confirmed') ||
+        message.includes('invalid credentials') ||
+        message.includes('wrong password') ||
+        message.includes('user not found')) {
       return 'Invalid email or password. Please check your credentials and try again.'
     }
     
-    if (message.includes('email not confirmed')) {
+    // Check for unconfirmed email
+    if (message.includes('email not confirmed') || 
+        message.includes('confirm your email')) {
       return 'Please check your email and click the confirmation link before signing in.'
     }
     
-    if (message.includes('too many requests')) {
+    // Check for rate limiting
+    if (message.includes('too many requests') || 
+        message.includes('rate limit') ||
+        message.includes('email rate limit exceeded')) {
       return 'Too many login attempts. Please wait a few minutes before trying again.'
     }
     
-    if (message.includes('signup disabled')) {
+    // Check for signup disabled
+    if (message.includes('signup disabled') || 
+        message.includes('signups not allowed')) {
       return 'New account registration is currently disabled.'
     }
     
-    if (message.includes('email rate limit exceeded')) {
-      return 'Too many emails sent. Please wait before requesting another.'
-    }
-    
-    if (message.includes('network') || message.includes('fetch')) {
+    // Check for network errors
+    if (message.includes('network') || 
+        message.includes('fetch') ||
+        message.includes('connection') ||
+        error.name === 'NetworkError') {
       return 'Network error. Please check your internet connection and try again.'
     }
     
-    if (message.includes('weak password')) {
+    // Check for weak password (though this shouldn't happen on sign in)
+    if (message.includes('weak password') || 
+        message.includes('password')) {
       return 'Password is too weak. Please choose a stronger password.'
     }
     
-    // For any other errors, show the original message if it's user-friendly
-    if (error.message && error.message.length < 100 && !error.message.includes('Error')) {
+    // For any other errors, show a more specific message based on common patterns
+    if (message.includes('invalid')) {
+      return 'Invalid email or password. Please check your credentials and try again.'
+    }
+    
+    if (message.includes('not found')) {
+      return 'No account found with this email address. Please check your email or create a new account.'
+    }
+    
+    // If we have a short, readable error message, use it
+    if (error.message && error.message.length < 100 && !error.message.includes('Error:')) {
       return error.message
     }
     
     // Fallback for truly unexpected errors
-    return 'Unable to sign in. Please try again or contact support if the problem persists.'
+    return 'Unable to sign in. Please check your credentials and try again.'
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

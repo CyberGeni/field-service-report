@@ -55,51 +55,85 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
   }
 
   const getErrorMessage = (error: AuthError): string => {
-    // Handle specific Supabase auth error codes and messages
-    const message = error.message.toLowerCase()
+    console.log('Auth error details:', error)
     
+    // Handle specific Supabase auth error codes and messages
+    const message = error.message?.toLowerCase() || ''
+    
+    // Check for existing user - this is the most common signup error
     if (message.includes('user already registered') || 
         message.includes('email already registered') ||
         message.includes('email already exists') ||
-        message.includes('already been registered')) {
+        message.includes('already been registered') ||
+        message.includes('user with this email already exists') ||
+        message.includes('duplicate')) {
       return 'An account with this email address already exists. Please sign in instead or use a different email.'
     }
     
-    if (message.includes('invalid email')) {
+    // Check for invalid email format
+    if (message.includes('invalid email') || 
+        message.includes('email format')) {
       return 'Please enter a valid email address.'
     }
     
-    if (message.includes('weak password') || message.includes('password')) {
+    // Check for password issues
+    if (message.includes('weak password') || 
+        message.includes('password too weak') ||
+        message.includes('password must be') ||
+        message.includes('password should be')) {
       return 'Password is too weak. Please use at least 6 characters with uppercase, lowercase, and numbers.'
     }
     
-    if (message.includes('signup disabled') || message.includes('signups not allowed')) {
+    // Check for signup disabled
+    if (message.includes('signup disabled') || 
+        message.includes('signups not allowed') ||
+        message.includes('registration disabled')) {
       return 'New account registration is currently disabled. Please contact support.'
     }
     
-    if (message.includes('email rate limit exceeded') || message.includes('rate limit')) {
+    // Check for rate limiting
+    if (message.includes('email rate limit exceeded') || 
+        message.includes('rate limit') ||
+        message.includes('too many requests') ||
+        message.includes('too many signup attempts')) {
       return 'Too many signup attempts. Please wait a few minutes before trying again.'
     }
     
-    if (message.includes('network') || message.includes('fetch')) {
+    // Check for network errors
+    if (message.includes('network') || 
+        message.includes('fetch') ||
+        message.includes('connection') ||
+        error.name === 'NetworkError') {
       return 'Network error. Please check your internet connection and try again.'
     }
     
+    // Check for domain restrictions
     if (message.includes('invalid') && message.includes('domain')) {
       return 'Email domain is not allowed. Please use a different email address.'
     }
     
-    if (message.includes('captcha')) {
+    // Check for captcha issues
+    if (message.includes('captcha') || 
+        message.includes('verification')) {
       return 'Security verification failed. Please try again.'
     }
     
-    // For any other errors, show the original message if it's user-friendly
-    if (error.message && error.message.length < 100 && !error.message.includes('Error')) {
+    // For any other errors, check for common patterns
+    if (message.includes('invalid')) {
+      return 'Please check your email address and try again.'
+    }
+    
+    if (message.includes('password')) {
+      return 'Password requirements not met. Please use at least 6 characters with uppercase, lowercase, and numbers.'
+    }
+    
+    // If we have a short, readable error message, use it
+    if (error.message && error.message.length < 100 && !error.message.includes('Error:')) {
       return error.message
     }
     
     // Fallback for truly unexpected errors
-    return 'Unable to create account. Please try again or contact support if the problem persists.'
+    return 'Unable to create account. Please check your information and try again.'
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
