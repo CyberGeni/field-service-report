@@ -142,15 +142,20 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
     setLoading(true)
     setErrors({})
 
-    const { error } = await onSignUp(email, password)
-    
-    if (error) {
-      setErrors({ general: getErrorMessage(error) })
-    } else {
-      setSuccess(true)
+    try {
+      const { error } = await onSignUp(email, password)
+      
+      if (error) {
+        setErrors({ general: getErrorMessage(error) })
+      } else {
+        setSuccess(true)
+      }
+    } catch (err) {
+      // Handle any unexpected errors that might occur
+      setErrors({ general: 'An unexpected error occurred. Please try again.' })
+    } finally {
+      setLoading(false)
     }
-    
-    setLoading(false)
   }
 
   if (success) {
