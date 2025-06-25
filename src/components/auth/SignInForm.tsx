@@ -157,8 +157,7 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
             <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start space-x-3">
               <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-red-700 text-sm font-medium">Sign In Failed</p>
-                <p className="text-red-600 text-sm mt-1">{errors.general}</p>
+                <p className="text-red-600 text-sm">{errors.general}</p>
               </div>
             </div>
           )}
