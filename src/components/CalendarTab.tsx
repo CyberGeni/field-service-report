@@ -258,9 +258,6 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
             {/* Info about zero values */}
             <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-              <p className="text-yellow-800 text-sm">
-                💡 <strong>Tip:</strong> Enter 0 hours and 0 minutes to delete the existing record for this service type.
-              </p>
             </div>
           </div>
 
