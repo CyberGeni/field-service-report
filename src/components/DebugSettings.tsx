@@ -12,7 +12,10 @@ const DebugSettings: React.FC = () => {
   const { refetch } = useStorage();
 
   const fetchDbData = async () => {
-    if (!user) return;
+    if (!user) {
+      setDbData({ error: 'No user authenticated' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -36,6 +39,11 @@ const DebugSettings: React.FC = () => {
   };
 
   const forceRefresh = async () => {
+    if (!user) {
+      console.log('❌ Cannot refresh: No user authenticated');
+      return;
+    }
+    
     console.log('🔄 Force refreshing data...');
     await refetch();
     await fetchDbData();
@@ -46,7 +54,11 @@ const DebugSettings: React.FC = () => {
       <button
         onClick={() => {
           setShowDebug(true);
-          fetchDbData();
+          if (user) {
+            fetchDbData();
+          } else {
+            setDbData({ error: 'No user authenticated' });
+          }
         }}
         className="fixed bottom-20 right-4 bg-gray-800 text-white p-2 rounded-full shadow-lg z-50"
         title="Show debug info"
@@ -80,20 +92,26 @@ const DebugSettings: React.FC = () => {
         <div className="flex space-x-2">
           <button
             onClick={fetchDbData}
-            disabled={loading}
+            disabled={loading || !user}
             className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 disabled:bg-blue-300"
           >
             {loading ? 'Loading...' : 'Refresh DB'}
           </button>
           <button
             onClick={forceRefresh}
-            disabled={loading}
+            disabled={loading || !user}
             className="text-sm bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 disabled:bg-green-300 flex items-center space-x-1"
           >
             <RefreshCw size={12} />
             <span>Force Reload</span>
           </button>
         </div>
+
+        {!user && (
+          <div className="text-sm text-amber-600 bg-amber-50 p-2 rounded">
+            Please log in to access debug features
+          </div>
+        )}
 
         {dbData && (
           <div>
