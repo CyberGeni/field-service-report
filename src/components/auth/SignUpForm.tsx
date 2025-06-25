@@ -204,7 +204,7 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* General Error */}
           {errors.general && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-2 flex items-start space-x-1">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-2 flex items-start space-x-2">
               <AlertCircle size={16} className="text-red-500 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-red-600 text-sm">{errors.general}</p>
