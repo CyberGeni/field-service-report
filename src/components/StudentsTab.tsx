@@ -441,19 +441,17 @@ const VisitModal: React.FC<VisitModalProps> = ({
   );
 };
 
-interface StudentDetailsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface StudentDetailsScreenProps {
   student: Student;
+  onBack: () => void;
   onEditStudent: (student: Student) => void;
   onDeleteStudent: (student: Student) => void;
   onRecordVisit: (studentId: string, studentName: string) => void;
 }
 
-const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
-  isOpen,
-  onClose,
+const StudentDetailsScreen: React.FC<StudentDetailsScreenProps> = ({
   student,
+  onBack,
   onEditStudent,
   onDeleteStudent,
   onRecordVisit
@@ -463,12 +461,12 @@ const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
   const { loadStudentVisits } = useStudents();
   const { user } = useAuth();
 
-  // Load visits when modal opens
+  // Load visits when component mounts
   React.useEffect(() => {
-    if (isOpen && student && user) {
+    if (student && user) {
       loadVisits();
     }
-  }, [isOpen, student, user]);
+  }, [student, user]);
 
   const loadVisits = async () => {
     if (!user) {
@@ -512,175 +510,170 @@ const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
     return `${Math.floor(diffDays / 30)} months ago`;
   };
 
-  if (!isOpen) return null;
-
   const timeSinceLastVisit = getTimeSinceLastVisit(student.last_visit_date);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft size={20} className="text-gray-500" />
-              </button>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-800">{student.name}</h3>
-                <p className="text-sm text-gray-600">Student Details</p>
-              </div>
-            </div>
-            
-            <div className="flex space-x-2">
-              <button
-                onClick={() => onRecordVisit(student.id, student.name)}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
-              >
-                <Plus size={16} />
-                <span>Record Visit</span>
-              </button>
-              <button
-                onClick={() => onEditStudent(student)}
-                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                title="Edit student"
-              >
-                <Edit size={18} />
-              </button>
-              <button
-                onClick={() => onDeleteStudent(student)}
-                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                title="Delete student"
-              >
-                <Trash2 size={18} />
-              </button>
-            </div>
-          </div>
-
-          {/* Student Info */}
-          <div className="bg-gray-50 rounded-xl p-4 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3">
-                  <MapPin size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Address</p>
-                    <p className="text-sm text-gray-600">{student.address}</p>
-                  </div>
-                </div>
-                
-                {student.publication_left && (
-                  <div className="flex items-start space-x-3">
-                    <BookOpen size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Publication</p>
-                      <p className="text-sm text-gray-600">{student.publication_left}</p>
-                    </div>
-                  </div>
-                )}
-
-                {student.place_stopped && (
-                  <div className="flex items-start space-x-3">
-                    <BookOpen size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">Current Place</p>
-                      <p className="text-sm text-gray-600">{student.place_stopped}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-start space-x-3">
-                  <Calendar size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Date Met</p>
-                    <p className="text-sm text-gray-600">{formatDate(student.date_met)}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-start space-x-3">
-                  <Clock size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-gray-700">Last Visit</p>
-                    <p className="text-sm text-gray-600">
-                      {formatDate(student.last_visit_date)}
-                      {timeSinceLastVisit && (
-                        <span className="text-gray-500 ml-1">({timeSinceLastVisit})</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {student.last_study_notes && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <p className="text-sm font-medium text-gray-700 mb-1">Last Study Notes:</p>
-                <p className="text-sm text-gray-600">{student.last_study_notes}</p>
-              </div>
-            )}
-          </div>
-
-          {/* Visit History */}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={onBack}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <ArrowLeft size={20} className="text-gray-500" />
+          </button>
           <div>
-            <h4 className="text-lg font-semibold text-gray-800 mb-4">Visit History</h4>
-            
-            {!user ? (
-              <div className="text-center py-8 text-gray-500">
-                <p className="font-medium">Authentication required</p>
-                <p className="text-sm">Please sign in to view visit history</p>
-              </div>
-            ) : loadingVisits ? (
-              <div className="text-center py-8">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading visits...</p>
-              </div>
-            ) : visits.length > 0 ? (
-              <div className="space-y-3 max-h-60 overflow-y-auto">
-                {visits.map((visit) => (
-                  <div key={visit.id} className="bg-white border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center space-x-3">
-                        <Calendar size={16} className="text-blue-500 flex-shrink-0" />
-                        <div>
-                          <p className="font-medium text-gray-800">
-                            {new Date(visit.visit_date).toLocaleDateString('en-US', {
-                              weekday: 'long',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric'
-                            })}
-                          </p>
-                          {visit.place_stopped && (
-                            <p className="text-sm text-gray-600">
-                              Stopped at: {visit.place_stopped}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {visit.notes && (
-                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                        <p className="text-sm text-gray-700">{visit.notes}</p>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-                <p className="font-medium">No visits recorded yet</p>
-                <p className="text-sm">Record your first visit to start tracking progress</p>
-              </div>
-            )}
+            <h1 className="text-2xl font-bold text-gray-800">{student.name}</h1>
+            <p className="text-gray-600">Student Details</p>
           </div>
         </div>
+        
+        <div className="flex space-x-2">
+          <button
+            onClick={() => onRecordVisit(student.id, student.name)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+          >
+            <Plus size={16} />
+            <span>Record Visit</span>
+          </button>
+          <button
+            onClick={() => onEditStudent(student)}
+            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            title="Edit student"
+          >
+            <Edit size={18} />
+          </button>
+          <button
+            onClick={() => onDeleteStudent(student)}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            title="Delete student"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+      </div>
+
+      {/* Student Info */}
+      <div className="bg-white rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Student Information</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="flex items-start space-x-3">
+              <MapPin size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Address</p>
+                <p className="text-sm text-gray-600">{student.address}</p>
+              </div>
+            </div>
+            
+            {student.publication_left && (
+              <div className="flex items-start space-x-3">
+                <BookOpen size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Publication</p>
+                  <p className="text-sm text-gray-600">{student.publication_left}</p>
+                </div>
+              </div>
+            )}
+
+            {student.place_stopped && (
+              <div className="flex items-start space-x-3">
+                <BookOpen size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Current Place</p>
+                  <p className="text-sm text-gray-600">{student.place_stopped}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-start space-x-3">
+              <Calendar size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Date Met</p>
+                <p className="text-sm text-gray-600">{formatDate(student.date_met)}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-start space-x-3">
+              <Clock size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">Last Visit</p>
+                <p className="text-sm text-gray-600">
+                  {formatDate(student.last_visit_date)}
+                  {timeSinceLastVisit && (
+                    <span className="text-gray-500 ml-1">({timeSinceLastVisit})</span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {student.last_study_notes && (
+          <div className="mt-6 pt-4 border-t border-gray-200">
+            <p className="text-sm font-medium text-gray-700 mb-2">Last Study Notes:</p>
+            <p className="text-sm text-gray-600">{student.last_study_notes}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Visit History */}
+      <div className="bg-white rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Visit History</h2>
+        
+        {!user ? (
+          <div className="text-center py-8 text-gray-500">
+            <p className="font-medium">Authentication required</p>
+            <p className="text-sm">Please sign in to view visit history</p>
+          </div>
+        ) : loadingVisits ? (
+          <div className="text-center py-8">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading visits...</p>
+          </div>
+        ) : visits.length > 0 ? (
+          <div className="space-y-4">
+            {visits.map((visit) => (
+              <div key={visit.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center space-x-3">
+                    <Calendar size={16} className="text-blue-500 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-gray-800">
+                        {new Date(visit.visit_date).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
+                      </p>
+                      {visit.place_stopped && (
+                        <p className="text-sm text-gray-600">
+                          Stopped at: {visit.place_stopped}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {visit.notes && (
+                  <div className="mt-3 p-3 bg-white rounded-lg">
+                    <p className="text-sm text-gray-700">{visit.notes}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+            <p className="font-medium">No visits recorded yet</p>
+            <p className="text-sm">Record your first visit to start tracking progress</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -753,7 +746,7 @@ const StudentsTab: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showDetailsScreen, setShowDetailsScreen] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
   const [visitModalMode, setVisitModalMode] = useState<'add' | 'edit'>('add');
   const [visitStudentId, setVisitStudentId] = useState('');
@@ -786,7 +779,12 @@ const StudentsTab: React.FC = () => {
 
   const handleViewStudent = (student: Student) => {
     setSelectedStudent(student);
-    setShowDetailsModal(true);
+    setShowDetailsScreen(true);
+  };
+
+  const handleBackFromDetails = () => {
+    setShowDetailsScreen(false);
+    setSelectedStudent(null);
   };
 
   const handleRecordVisit = (studentId: string, studentName: string) => {
@@ -794,7 +792,6 @@ const StudentsTab: React.FC = () => {
     setVisitStudentName(studentName);
     setVisitModalMode('add');
     setShowVisitModal(true);
-    setShowDetailsModal(false); // Close details modal if open
   };
 
   const confirmDelete = async () => {
@@ -805,6 +802,11 @@ const StudentsTab: React.FC = () => {
       await deleteStudent(studentToDelete.id);
       setShowDeleteModal(false);
       setStudentToDelete(null);
+      // If we're viewing the deleted student, go back to list
+      if (selectedStudent?.id === studentToDelete.id) {
+        setShowDetailsScreen(false);
+        setSelectedStudent(null);
+      }
     } catch (error) {
       // Error is handled by the hook
     } finally {
@@ -836,6 +838,19 @@ const StudentsTab: React.FC = () => {
     if (diffDays < 60) return '1 month ago';
     return `${Math.floor(diffDays / 30)} months ago`;
   };
+
+  // Show student details screen if a student is selected
+  if (showDetailsScreen && selectedStudent) {
+    return (
+      <StudentDetailsScreen
+        student={selectedStudent}
+        onBack={handleBackFromDetails}
+        onEditStudent={handleEditStudent}
+        onDeleteStudent={handleDeleteStudent}
+        onRecordVisit={handleRecordVisit}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -1028,18 +1043,6 @@ const StudentsTab: React.FC = () => {
         student={selectedStudent}
         mode={modalMode}
       />
-
-      {/* Student Details Modal */}
-      {selectedStudent && (
-        <StudentDetailsModal
-          isOpen={showDetailsModal}
-          onClose={() => setShowDetailsModal(false)}
-          student={selectedStudent}
-          onEditStudent={handleEditStudent}
-          onDeleteStudent={handleDeleteStudent}
-          onRecordVisit={handleRecordVisit}
-        />
-      )}
 
       {/* Visit Modal */}
       <VisitModal
