@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { ServiceRecord, Settings, FieldServiceDay } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
@@ -20,12 +20,7 @@ export const useStorage = () => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const { user } = useAuth();
-  
-  // Use ref to track if we're currently updating to prevent loops
-  const isUpdatingRef = useRef(false);
-  const subscriptionRef = useRef<any>(null);
 
   // Load data when user changes
   useEffect(() => {
@@ -35,83 +30,9 @@ export const useStorage = () => {
       // Clear data when user logs out
       setRecords([]);
       setSettings(DEFAULT_SETTINGS);
-      setLastUpdatedAt(null);
       setLoading(false);
-      
-      // Clean up subscription
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe();
-        subscriptionRef.current = null;
-      }
     }
   }, [user]);
-
-  // Set up real-time subscription for settings changes
-  useEffect(() => {
-    if (!user) return;
-
-    // Clean up existing subscription
-    if (subscriptionRef.current) {
-      subscriptionRef.current.unsubscribe();
-    }
-
-    console.log('🔄 Setting up real-time subscription for user settings');
-
-    subscriptionRef.current = supabase
-      .channel(`user_settings_${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_settings',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('🔄 Real-time settings change detected:', payload);
-          
-          // Don't process updates that we initiated ourselves
-          if (isUpdatingRef.current) {
-            console.log('⏭️ Ignoring self-initiated update');
-            return;
-          }
-          
-          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-            const newData = payload.new;
-            const newUpdatedAt = newData.updated_at;
-            
-            console.log('🕒 Comparing timestamps:');
-            console.log('🕒 Local updated_at:', lastUpdatedAt);
-            console.log('🕒 Remote updated_at:', newUpdatedAt);
-            
-            // Only update if this change is newer than what we have locally
-            if (!lastUpdatedAt || newUpdatedAt > lastUpdatedAt) {
-              console.log('✅ Applying real-time settings update (newer than local)');
-              
-              // Parse the settings from the real-time update
-              const parsedSettings = parseSettingsFromDatabase(newData);
-              console.log('📊 Parsed settings from real-time update:', parsedSettings);
-              
-              setSettings(parsedSettings);
-              setLastUpdatedAt(newUpdatedAt);
-            } else {
-              console.log('⏭️ Ignoring real-time update (older than or equal to local)');
-            }
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('🔄 Subscription status:', status);
-      });
-
-    return () => {
-      console.log('🔄 Cleaning up real-time subscription');
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe();
-        subscriptionRef.current = null;
-      }
-    };
-  }, [user, lastUpdatedAt]);
 
   const parseSettingsFromDatabase = (settingsData: any): Settings => {
     console.log('📊 Parsing settings from database:', settingsData);
@@ -168,7 +89,7 @@ export const useStorage = () => {
       setLoading(true);
       setError(null);
 
-      console.log('🔄 Loading data for user:', user.id);
+      console.log('🔄 Loading fresh data for user:', user.id);
 
       // Load service records
       const { data: recordsData, error: recordsError } = await supabase
@@ -180,7 +101,6 @@ export const useStorage = () => {
       if (recordsError) throw recordsError;
 
       // Transform database records to match our ServiceRecord type
-      // Convert 'rv' type to 'h2h' since we merged them
       const transformedRecords: ServiceRecord[] = (recordsData || []).map(record => ({
         id: record.id,
         date: record.date,
@@ -193,7 +113,7 @@ export const useStorage = () => {
       setRecords(transformedRecords);
       console.log('✅ Loaded service records:', transformedRecords.length, 'records');
 
-      // Load user settings with explicit ordering to get the latest
+      // Load user settings - always get the latest from database
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
         .select('*')
@@ -213,10 +133,8 @@ export const useStorage = () => {
         
         console.log('✅ Final loaded settings:', loadedSettings);
         console.log('🎯 Field service days loaded:', loadedSettings.fieldServiceDays);
-        console.log('🕒 Settings updated_at:', settingsData.updated_at);
         
         setSettings(loadedSettings);
-        setLastUpdatedAt(settingsData.updated_at);
       } else {
         console.log('📝 No settings found, creating default settings');
         // Create default settings for new user
@@ -237,8 +155,6 @@ export const useStorage = () => {
       console.log('📝 Creating default settings for user:', user.id);
       console.log('📝 Default field service days:', DEFAULT_SETTINGS.fieldServiceDays);
       
-      isUpdatingRef.current = true;
-      
       const { data, error } = await supabase
         .from('user_settings')
         .insert({
@@ -256,11 +172,8 @@ export const useStorage = () => {
       
       console.log('✅ Default settings created successfully');
       setSettings(DEFAULT_SETTINGS);
-      setLastUpdatedAt(data.updated_at);
     } catch (err: any) {
       console.error('❌ Error creating default settings:', err);
-    } finally {
-      isUpdatingRef.current = false;
     }
   };
 
@@ -422,56 +335,25 @@ export const useStorage = () => {
 
     try {
       setError(null);
-      isUpdatingRef.current = true;
 
       const updatedSettings = { ...settings, ...newSettings };
 
-      console.log('💾 Starting settings update...');
-      console.log('💾 Current settings:', settings);
-      console.log('💾 New settings partial:', newSettings);
-      console.log('💾 Updated settings (merged):', updatedSettings);
-      console.log('🎯 Field service days to save:', updatedSettings.fieldServiceDays);
-      console.log('🕒 Current lastUpdatedAt:', lastUpdatedAt);
+      console.log('💾 Updating settings...');
+      console.log('💾 Field service days to save:', updatedSettings.fieldServiceDays);
 
-      // First, get the current state from the database to check for conflicts
-      const { data: currentData, error: checkError } = await supabase
-        .from('user_settings')
-        .select('updated_at')
-        .eq('user_id', user.id)
-        .single();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        throw checkError;
-      }
-
-      // Check for conflicts
-      if (currentData && lastUpdatedAt && currentData.updated_at > lastUpdatedAt) {
-        console.log('⚠️ Settings have been updated by another device!');
-        console.log('🕒 Local updated_at:', lastUpdatedAt);
-        console.log('🕒 Remote updated_at:', currentData.updated_at);
-        
-        // Reload the latest settings first
-        console.log('🔄 Reloading latest settings...');
-        await loadData();
-        
-        throw new Error('Settings were updated on another device. Please try again with the latest version.');
-      }
-
-      // Prepare the update data - ensure field service days are properly formatted
+      // Prepare the update data
       const updateData: any = {
         user_id: user.id,
         monthly_target: updatedSettings.monthlyTarget,
         yearly_target: updatedSettings.yearlyTarget,
-        field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
-        field_service_days_config: updatedSettings.fieldServiceDays, // New format with full structure
+        field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format
+        field_service_days_config: updatedSettings.fieldServiceDays, // New format
         service_year_start: updatedSettings.serviceYearStart
       };
 
-      console.log('💾 Prepared update data for database:', updateData);
-      console.log('💾 field_service_days (legacy):', updateData.field_service_days);
-      console.log('💾 field_service_days_config (new):', updateData.field_service_days_config);
+      console.log('💾 Saving to database:', updateData);
 
-      // Perform the update
+      // Save to database
       const { data, error } = await supabase
         .from('user_settings')
         .upsert(updateData, {
@@ -481,46 +363,36 @@ export const useStorage = () => {
         .single();
 
       if (error) {
-        console.error('❌ Database error during settings update:', error);
+        console.error('❌ Database error:', error);
         throw error;
       }
 
-      console.log('✅ Settings updated successfully in database');
-      console.log('✅ Database response:', data);
+      console.log('✅ Settings saved to database successfully');
 
-      // Update local state only after successful database update
+      // Update local state
       setSettings(updatedSettings);
-      setLastUpdatedAt(data.updated_at);
-      console.log('✅ Local settings updated successfully');
-      console.log('✅ New local field service days:', updatedSettings.fieldServiceDays);
-      console.log('✅ New lastUpdatedAt:', data.updated_at);
+      console.log('✅ Local settings updated');
 
-      // Verify the save worked by reading back immediately
+      // Verify the save worked
       setTimeout(async () => {
-        console.log('🔍 Performing verification read...');
-        const { data: verificationData, error: verificationError } = await supabase
+        console.log('🔍 Verifying save...');
+        const { data: verifyData, error: verifyError } = await supabase
           .from('user_settings')
-          .select('*')
+          .select('field_service_days_config')
           .eq('user_id', user.id)
           .single();
 
-        if (verificationError) {
-          console.error('❌ Verification read failed:', verificationError);
+        if (verifyError) {
+          console.error('❌ Verification failed:', verifyError);
         } else {
-          console.log('🔍 Verification read successful:');
-          console.log('🔍 field_service_days_config from DB:', verificationData.field_service_days_config);
-          console.log('🔍 Does it match what we tried to save?', 
-            JSON.stringify(verificationData.field_service_days_config) === JSON.stringify(updatedSettings.fieldServiceDays)
-          );
+          console.log('🔍 Verification successful - field service days in DB:', verifyData.field_service_days_config);
         }
-      }, 1000);
+      }, 500);
 
     } catch (err: any) {
       console.error('❌ Error updating settings:', err);
       setError(err.message);
-      throw err; // Re-throw to allow UI to handle the error
-    } finally {
-      isUpdatingRef.current = false;
+      throw err;
     }
   };
 
