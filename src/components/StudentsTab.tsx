@@ -516,7 +516,7 @@ const StudentDetailsScreen: React.FC<StudentDetailsScreenProps> = ({
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-white rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-3">
             <button
               onClick={onBack}
@@ -524,37 +524,36 @@ const StudentDetailsScreen: React.FC<StudentDetailsScreenProps> = ({
             >
               <ArrowLeft size={20} className="text-gray-500" />
             </button>
-            <div>
+            <div className="flex items-center space-x-3">
               <h1 className="text-2xl font-bold text-gray-800">{student.name}</h1>
-              <p className="text-gray-600">Student Details</p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => onEditStudent(student)}
+                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                  title="Edit student"
+                >
+                  <Edit size={18} />
+                </button>
+                <button
+                  onClick={() => onDeleteStudent(student)}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  title="Delete student"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
             </div>
           </div>
         </div>
         
-        {/* Action Buttons - Better Layout */}
-        <div className="grid grid-cols-3 gap-3">
-          <button
-            onClick={() => onRecordVisit(student.id, student.name)}
-            className="bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-          >
-            <Plus size={18} />
-            <span>Record Visit</span>
-          </button>
-          <button
-            onClick={() => onEditStudent(student)}
-            className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-          >
-            <Edit size={18} />
-            <span>Edit</span>
-          </button>
-          <button
-            onClick={() => onDeleteStudent(student)}
-            className="bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-          >
-            <Trash2 size={18} />
-            <span>Delete</span>
-          </button>
-        </div>
+        {/* Record Visit Button - Full Width */}
+        <button
+          onClick={() => onRecordVisit(student.id, student.name)}
+          className="w-full bg-green-600 hover:bg-green-700 text-white py-4 px-6 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
+        >
+          <Plus size={20} />
+          <span>Record Visit</span>
+        </button>
       </div>
 
       {/* Student Info */}
