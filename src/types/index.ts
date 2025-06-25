@@ -5,6 +5,7 @@ export interface ServiceRecord {
   minutes: number;
   type: 'h2h' | 'cart';
   notes?: string;
+  student_id?: string;
 }
 
 export interface FieldServiceDay {

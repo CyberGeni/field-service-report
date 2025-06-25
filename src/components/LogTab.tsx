@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Clock, Plus, Briefcase, BaggageClaim } from 'lucide-react';
+import { Clock, Plus, Briefcase, BaggageClaim, User, X } from 'lucide-react';
 import { ServiceRecord, TimerState } from '../types';
 import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
+import { useStudents } from '../hooks/useStudents';
 import Timer from './Timer';
 
 interface LogTabProps {
@@ -29,7 +30,12 @@ const LogTab: React.FC<LogTabProps> = ({
   const [manualMinutes, setManualMinutes] = useState(0);
   const [selectedDate, setSelectedDate] = useState(getDateString(new Date()));
   const [notes, setNotes] = useState('');
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [showAddStudent, setShowAddStudent] = useState(false);
+  const [newStudentName, setNewStudentName] = useState('');
+  const [newStudentAddress, setNewStudentAddress] = useState('');
   const { addToast } = useToast();
+  const { students, saveStudent } = useStudents();
 
   const today = new Date();
   const isToday = selectedDate === getDateString(today);
@@ -51,6 +57,42 @@ const LogTab: React.FC<LogTabProps> = ({
   const lastFieldServiceDateString = getDateString(lastFieldServiceDay);
   const hasLoggedLastFieldDay = records.some(r => r.date === lastFieldServiceDateString);
 
+  const handleAddNewStudent = async () => {
+    if (!newStudentName.trim() || !newStudentAddress.trim()) {
+      addToast({
+        type: 'error',
+        title: 'Missing Information',
+        description: 'Please enter both name and address for the new student'
+      });
+      return;
+    }
+
+    try {
+      const newStudent = await saveStudent({
+        name: newStudentName.trim(),
+        address: newStudentAddress.trim(),
+        date_met: selectedDate,
+        publication_left: '',
+        place_stopped: '',
+        last_visit_date: '',
+        last_study_notes: ''
+      });
+
+      setSelectedStudentId(newStudent.id);
+      setShowAddStudent(false);
+      setNewStudentName('');
+      setNewStudentAddress('');
+      
+      addToast({
+        type: 'success',
+        title: 'Student Added',
+        description: `${newStudent.name} has been added to your students list`
+      });
+    } catch (error) {
+      // Error is handled by the hook
+    }
+  };
+
   const handleTimerStop = () => {
     const totalMs = onStopTimer();
     const totalMinutes = Math.floor(totalMs / 60000);
@@ -65,11 +107,13 @@ const LogTab: React.FC<LogTabProps> = ({
         hours,
         minutes,
         type: selectedType,
-        notes: notes.trim() || undefined
+        notes: notes.trim() || undefined,
+        student_id: selectedStudentId || undefined
       };
       
       onSaveRecord(timerRecord);
       setNotes('');
+      setSelectedStudentId('');
       
       addToast({
         type: 'success',
@@ -92,11 +136,13 @@ const LogTab: React.FC<LogTabProps> = ({
       hours,
       minutes,
       type: selectedType,
-      notes: notes.trim() || undefined
+      notes: notes.trim() || undefined,
+      student_id: selectedStudentId || undefined
     };
     
     onSaveRecord(record);
     setNotes('');
+    setSelectedStudentId('');
     
     addToast({
       type: 'success',
@@ -234,6 +280,68 @@ const LogTab: React.FC<LogTabProps> = ({
                 className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
               />
             </div>
+          </div>
+
+          {/* Student Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Student Visited (optional)</label>
+            {!showAddStudent ? (
+              <div className="space-y-3">
+                <select
+                  value={selectedStudentId}
+                  onChange={(e) => setSelectedStudentId(e.target.value)}
+                  className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select a student...</option>
+                  {students.map((student) => (
+                    <option key={student.id} value={student.id}>
+                      {student.name} - {student.address}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setShowAddStudent(true)}
+                  className="w-full bg-green-50 hover:bg-green-100 text-green-700 py-2 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
+                >
+                  <Plus size={16} />
+                  <span>Add New Student</span>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3 p-4 bg-green-50 rounded-xl border border-green-200">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium text-green-800">Add New Student</h4>
+                  <button
+                    onClick={() => setShowAddStudent(false)}
+                    className="text-green-600 hover:text-green-800"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={newStudentName}
+                  onChange={(e) => setNewStudentName(e.target.value)}
+                  placeholder="Student's name"
+                  className="w-full p-3 bg-white rounded-xl border border-green-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                />
+                <textarea
+                  value={newStudentAddress}
+                  onChange={(e) => setNewStudentAddress(e.target.value)}
+                  placeholder="Student's address"
+                  rows={2}
+                  className="w-full p-3 bg-white rounded-xl border border-green-300 focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                />
+                <button
+                  onClick={handleAddNewStudent}
+                  disabled={!newStudentName.trim() || !newStudentAddress.trim()}
+                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-xl font-medium transition-colors"
+                >
+                  Add Student
+                </button>
+              </div>
+            )}
           </div>
 
           <div>
