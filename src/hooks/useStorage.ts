@@ -42,11 +42,11 @@ export const useStorage = () => {
     // Parse field service days from database format
     let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
     
-    // Try to use the new field_service_days_config column first
+    // PRIORITY 1: Try to use the new field_service_days_config column first
     if (settingsData.field_service_days_config) {
       console.log('🔍 Found field_service_days_config:', settingsData.field_service_days_config);
       
-      if (Array.isArray(settingsData.field_service_days_config)) {
+      if (Array.isArray(settingsData.field_service_days_config) && settingsData.field_service_days_config.length > 0) {
         try {
           fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
             day: fsd.day,
@@ -58,14 +58,15 @@ export const useStorage = () => {
         } catch (e) {
           console.warn('⚠️ Failed to parse field_service_days_config:', e);
           console.warn('Raw field_service_days_config data:', settingsData.field_service_days_config);
-          fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+          // Don't fall back to defaults - keep trying other methods
         }
       } else {
-        console.warn('⚠️ field_service_days_config is not an array:', typeof settingsData.field_service_days_config);
+        console.warn('⚠️ field_service_days_config is empty or not an array:', settingsData.field_service_days_config);
       }
     }
-    // Fallback to legacy field_service_days if config is not available
-    else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
+    
+    // PRIORITY 2: If config parsing failed or is empty, try legacy field_service_days
+    if (fieldServiceDays === DEFAULT_SETTINGS.fieldServiceDays && settingsData.field_service_days && Array.isArray(settingsData.field_service_days) && settingsData.field_service_days.length > 0) {
       console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
       // Convert legacy format to new format
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -76,7 +77,10 @@ export const useStorage = () => {
         label: `${dayNames[day]} - ${index % 2 === 0 ? 'House to House/Return Visits' : 'Cart Witnessing'}`
       }));
       console.log('✅ Converted legacy field service days:', fieldServiceDays);
-    } else {
+    }
+    
+    // PRIORITY 3: Only use defaults if absolutely nothing was found
+    if (fieldServiceDays === DEFAULT_SETTINGS.fieldServiceDays) {
       console.log('⚠️ No field service days found in database, using defaults');
     }
 
@@ -130,28 +134,33 @@ export const useStorage = () => {
       setRecords(transformedRecords);
       console.log('✅ Loaded service records:', transformedRecords.length, 'records');
 
-      // Load user settings - ALWAYS get from database, never use defaults unless no record exists
-      console.log('🔍 Querying user_settings table...');
+      // Load user settings - FORCE a fresh database query every time
+      console.log('🔍 Querying user_settings table with fresh query...');
+      
+      // Use a timestamp to ensure we get fresh data
+      const timestamp = Date.now();
+      console.log('🕐 Query timestamp:', timestamp);
+      
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', user.id)
-        .single(); // Use single() instead of maybeSingle() to ensure we get an error if no record
+        .limit(1);
 
-      console.log('📊 Settings query result:', { settingsData, settingsError });
+      console.log('📊 Settings query result:', { settingsData, settingsError, timestamp });
 
       if (settingsError) {
+        console.error('❌ Error loading settings:', settingsError);
         if (settingsError.code === 'PGRST116') {
           // No settings found - this is a new user
           console.log('📝 No settings found for user, creating default settings');
           await createDefaultSettings();
         } else {
-          console.error('❌ Error loading settings:', settingsError);
           throw settingsError;
         }
-      } else if (settingsData) {
+      } else if (settingsData && settingsData.length > 0) {
         console.log('📊 Found settings in database, parsing...');
-        const loadedSettings = parseSettingsFromDatabase(settingsData);
+        const loadedSettings = parseSettingsFromDatabase(settingsData[0]);
         console.log('✅ Settings loaded and parsed successfully');
         setSettings(loadedSettings);
       } else {
@@ -374,19 +383,19 @@ export const useStorage = () => {
       console.log('💾 Updated settings:', JSON.stringify(updatedSettings, null, 2));
       console.log('💾 Field service days to save:', updatedSettings.fieldServiceDays);
 
-      // Prepare the update data
+      // Prepare the update data - ALWAYS include both formats
       const updateData: any = {
         user_id: user.id,
         monthly_target: updatedSettings.monthlyTarget,
         yearly_target: updatedSettings.yearlyTarget,
         field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format
-        field_service_days_config: updatedSettings.fieldServiceDays, // New format
+        field_service_days_config: updatedSettings.fieldServiceDays, // New format - THIS IS THE IMPORTANT ONE
         service_year_start: updatedSettings.serviceYearStart
       };
 
       console.log('💾 Saving to database:', JSON.stringify(updateData, null, 2));
 
-      // Save to database
+      // Save to database using upsert to handle both insert and update
       const { data, error } = await supabase
         .from('user_settings')
         .upsert(updateData, {
@@ -402,11 +411,11 @@ export const useStorage = () => {
 
       console.log('✅ Settings saved to database successfully:', data);
 
-      // Update local state
+      // Update local state ONLY after successful database save
       setSettings(updatedSettings);
       console.log('✅ Local settings updated');
 
-      // Verify the save worked by reading back from database
+      // Verify the save worked by reading back from database after a short delay
       setTimeout(async () => {
         console.log('🔍 Verifying save...');
         const { data: verifyData, error: verifyError } = await supabase
@@ -420,6 +429,21 @@ export const useStorage = () => {
         } else {
           console.log('🔍 Verification successful - complete settings in DB:', JSON.stringify(verifyData, null, 2));
           console.log('🔍 Field service days config in DB:', verifyData.field_service_days_config);
+          
+          // If the verification shows different data, force a reload
+          const verifiedSettings = parseSettingsFromDatabase(verifyData);
+          const currentFieldServiceDaysStr = JSON.stringify(updatedSettings.fieldServiceDays);
+          const verifiedFieldServiceDaysStr = JSON.stringify(verifiedSettings.fieldServiceDays);
+          
+          if (currentFieldServiceDaysStr !== verifiedFieldServiceDaysStr) {
+            console.warn('⚠️ Verification shows different field service days! Forcing reload...');
+            console.warn('Expected:', currentFieldServiceDaysStr);
+            console.warn('Actual:', verifiedFieldServiceDaysStr);
+            // Force reload from database
+            loadData();
+          } else {
+            console.log('✅ Verification passed - data matches');
+          }
         }
       }, 1000);
 
