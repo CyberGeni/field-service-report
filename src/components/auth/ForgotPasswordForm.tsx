@@ -23,7 +23,8 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
       return 'No account found with this email address. Please check the email or create a new account.'
     }
     
-    if (message.includes('invalid email')) {
+    if (message.includes('invalid email') ||
+        message.includes('invalid login credentials')) {
       return 'Please enter a valid email address.'
     }
     
