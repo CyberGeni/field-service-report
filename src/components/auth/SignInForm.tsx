@@ -51,7 +51,6 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
     // Check for invalid credentials - this is the most common error
     if (message.includes('invalid login credentials') || 
         message.includes('invalid email or password') ||
-        message.includes('email not confirmed') ||
         message.includes('invalid credentials') ||
         message.includes('wrong password') ||
         message.includes('user not found')) {
