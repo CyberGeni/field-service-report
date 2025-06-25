@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim } from 'lucide-react';
+import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim, CheckCircle } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 import { useToast } from './ui/toast';
@@ -248,6 +248,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [localProfile, setLocalProfile] = useState(profile);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [error, setError] = useState('');
   const [imageError, setImageError] = useState(false);
   const { addToast } = useToast();
@@ -257,6 +258,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
     if (isOpen) {
       setLocalProfile(profile);
       setImageError(false);
+      setUploadSuccess(false);
       setError('');
     }
   }, [isOpen, profile]);
@@ -280,6 +282,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
     setUploading(true);
     setError('');
     setImageError(false);
+    setUploadSuccess(false);
     
     try {
       console.log('Starting avatar upload...');
@@ -299,6 +302,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
       if (avatarUrl) {
         console.log('Avatar uploaded successfully:', avatarUrl);
         setLocalProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
+        setUploadSuccess(true);
         addToast({
           type: 'success',
           title: 'Avatar Uploaded',
@@ -414,9 +418,22 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                     />
                   </label>
                 )}
+                {uploading && (
+                  <div className="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center">
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+                {uploadSuccess && (
+                  <div className="absolute -top-1 -right-1 bg-green-500 text-white rounded-full p-1">
+                    <CheckCircle size={12} />
+                  </div>
+                )}
               </div>
               {uploading && (
                 <p className="text-sm text-blue-600 mt-2">Uploading...</p>
+              )}
+              {uploadSuccess && (
+                <p className="text-sm text-green-600 mt-2">✓ Avatar updated</p>
               )}
               {imageError && localProfile.avatar_url && (
                 <p className="text-sm text-red-600 mt-2">Failed to load image</p>

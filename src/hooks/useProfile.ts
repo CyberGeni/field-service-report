@@ -135,13 +135,14 @@ export function useProfile(user: any) {
         throw new Error('File size must be less than 5MB')
       }
 
-      // Create a unique filename
+      // Create a unique filename with timestamp to avoid caching issues
       const fileExt = file.name.split('.').pop()?.toLowerCase()
-      const fileName = `${user.id}/${Date.now()}.${fileExt}`
+      const timestamp = Date.now()
+      const fileName = `${user.id}/${timestamp}.${fileExt}`
 
       console.log('Uploading to storage path:', fileName)
 
-      // First, try to delete any existing avatar for this user
+      // First, try to delete any existing avatar for this user to clean up storage
       try {
         const { data: existingFiles } = await supabase.storage
           .from('avatars')
@@ -153,9 +154,10 @@ export function useProfile(user: any) {
           await supabase.storage
             .from('avatars')
             .remove(filesToDelete)
+          console.log('Cleaned up existing avatar files')
         }
       } catch (cleanupError) {
-        console.warn('Could not clean up existing avatars:', cleanupError)
+        console.warn('Could not clean up existing avatars (this is okay):', cleanupError)
         // Continue with upload even if cleanup fails
       }
 
@@ -175,12 +177,14 @@ export function useProfile(user: any) {
 
       console.log('File uploaded successfully to storage:', uploadData)
 
-      // Get the public URL
+      // Get the public URL with cache busting
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName)
 
-      console.log('Generated public URL:', publicUrl)
+      // Add cache busting parameter to ensure fresh image loads
+      const cacheBustedUrl = `${publicUrl}?t=${timestamp}`
+      console.log('Generated public URL with cache busting:', cacheBustedUrl)
 
       // Verify the URL is accessible by making a HEAD request
       try {
@@ -192,31 +196,11 @@ export function useProfile(user: any) {
           console.log('Avatar URL verified as accessible')
         }
       } catch (fetchError) {
-        console.warn('Could not verify avatar URL accessibility:', fetchError)
+        console.warn('Could not verify avatar URL accessibility (this is okay):', fetchError)
         // Don't throw here, the URL might still work for display
       }
 
-      // Update the profile in the database with the new avatar URL
-      if (profile) {
-        console.log('Updating profile with new avatar URL:', publicUrl)
-        
-        const { data: updatedProfile, error: updateError } = await supabase
-          .from('profiles')
-          .update({ avatar_url: publicUrl })
-          .eq('id', user.id)
-          .select()
-          .single()
-
-        if (updateError) {
-          console.error('Failed to update profile with avatar URL:', updateError)
-          throw new Error(`Failed to save avatar: ${updateError.message}`)
-        }
-
-        console.log('Profile updated with new avatar URL:', updatedProfile)
-        setProfile(updatedProfile)
-      }
-
-      return { data: publicUrl, error: null }
+      return { data: cacheBustedUrl, error: null }
     } catch (err: any) {
       console.error('Avatar upload error:', err)
       return { data: null, error: err }

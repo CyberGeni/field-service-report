@@ -21,6 +21,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
   const [uploading, setUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [imageError, setImageError] = useState(false)
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -41,12 +42,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
     setAvatarFile(file)
     setError('')
     setUploadSuccess(false)
+    setImageError(false)
     
     // Create preview URL
     const previewUrl = URL.createObjectURL(file)
     setAvatarUrl(previewUrl)
 
-    // Upload immediately
+    // Upload immediately for better UX
     setUploading(true)
     try {
       console.log('Uploading avatar during profile setup...')
@@ -58,6 +60,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
         // Keep the preview URL so user can still see their selection
       } else if (uploadedUrl) {
         console.log('Avatar uploaded successfully:', uploadedUrl)
+        // Clean up the preview URL
+        URL.revokeObjectURL(previewUrl)
         setAvatarUrl(uploadedUrl)
         setUploadSuccess(true)
         setError('')
@@ -68,6 +72,16 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleImageError = () => {
+    console.warn('Profile preview image failed to load:', avatarUrl)
+    setImageError(true)
+  }
+
+  const handleImageLoad = () => {
+    console.log('Profile preview image loaded successfully:', avatarUrl)
+    setImageError(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -126,15 +140,13 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
           <div className="text-center">
             <div className="relative inline-block">
               <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                {avatarUrl ? (
+                {avatarUrl && !imageError ? (
                   <img
                     src={avatarUrl}
                     alt="Profile"
                     className="w-full h-full object-cover"
-                    onError={(e) => {
-                      console.warn('Profile preview image failed to load')
-                      // Don't reset avatarUrl here to avoid infinite loops
-                    }}
+                    onError={handleImageError}
+                    onLoad={handleImageLoad}
                   />
                 ) : (
                   <User size={32} className="text-gray-400" />
@@ -169,6 +181,9 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
             )}
             {uploadSuccess && (
               <p className="text-sm text-green-600 mt-1">✓ Avatar uploaded successfully</p>
+            )}
+            {imageError && avatarUrl && (
+              <p className="text-sm text-red-600 mt-1">Failed to load image preview</p>
             )}
           </div>
 
