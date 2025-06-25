@@ -122,7 +122,10 @@ export const useStudents = () => {
         name: updates.name?.trim(),
         address: updates.address?.trim(),
         publication_left: updates.publication_left?.trim() || null,
-        last_study_notes: updates.last_study_notes?.trim() || null
+        last_study_notes: updates.last_study_notes?.trim() || null,
+        // Convert empty strings to null for date fields
+        date_met: updates.date_met === '' ? null : updates.date_met,
+        last_visit_date: updates.last_visit_date === '' ? null : updates.last_visit_date
       };
 
       // Remove undefined values
