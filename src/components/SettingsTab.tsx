@@ -249,7 +249,17 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [imageError, setImageError] = useState(false);
   const { addToast } = useToast();
+
+  // Reset local profile when modal opens or profile changes
+  useEffect(() => {
+    if (isOpen) {
+      setLocalProfile(profile);
+      setImageError(false);
+      setError('');
+    }
+  }, [isOpen, profile]);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -269,10 +279,14 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
 
     setUploading(true);
     setError('');
+    setImageError(false);
+    
     try {
+      console.log('Starting avatar upload...');
       const { data: avatarUrl, error: uploadError } = await onUploadAvatar(file);
       
       if (uploadError) {
+        console.error('Avatar upload error:', uploadError);
         setError('Failed to upload avatar: ' + uploadError.message);
         addToast({
           type: 'error',
@@ -283,6 +297,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
       }
 
       if (avatarUrl) {
+        console.log('Avatar uploaded successfully:', avatarUrl);
         setLocalProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
         addToast({
           type: 'success',
@@ -301,6 +316,16 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleImageError = () => {
+    console.warn('Profile image failed to load:', localProfile.avatar_url);
+    setImageError(true);
+  };
+
+  const handleImageLoad = () => {
+    console.log('Profile image loaded successfully:', localProfile.avatar_url);
+    setImageError(false);
   };
 
   const handleSave = async () => {
@@ -364,12 +389,14 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <div className="text-center">
               <div className="relative inline-block">
                 <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {localProfile.avatar_url ? (
+                  {localProfile.avatar_url && !imageError ? (
                     <img
                       src={localProfile.avatar_url}
                       alt={localProfile.name}
                       className="w-full h-full object-cover rounded-full"
                       style={{ aspectRatio: '1 / 1' }}
+                      onError={handleImageError}
+                      onLoad={handleImageLoad}
                     />
                   ) : (
                     <User size={28} className="text-gray-400" />
@@ -390,6 +417,9 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
               </div>
               {uploading && (
                 <p className="text-sm text-blue-600 mt-2">Uploading...</p>
+              )}
+              {imageError && localProfile.avatar_url && (
+                <p className="text-sm text-red-600 mt-2">Failed to load image</p>
               )}
             </div>
 
@@ -489,6 +519,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
   const [editingFieldServiceDay, setEditingFieldServiceDay] = useState<FieldServiceDay | null>(null);
+  const [imageError, setImageError] = useState(false);
   const { addToast } = useToast();
 
   const handleSignOut = async () => {
@@ -618,6 +649,16 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  const handleImageError = () => {
+    console.warn('Profile image failed to load:', profile?.avatar_url);
+    setImageError(true);
+  };
+
+  const handleImageLoad = () => {
+    console.log('Profile image loaded successfully:', profile?.avatar_url);
+    setImageError(false);
+  };
+
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   // Check if current service type has requirements
@@ -649,12 +690,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           
           <div className="flex items-center space-x-4">
             <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden flex-shrink-0">
-              {profile.avatar_url ? (
+              {profile.avatar_url && !imageError ? (
                 <img
                   src={profile.avatar_url}
                   alt={profile.name}
                   className="w-full h-full object-cover rounded-full"
                   style={{ aspectRatio: '1 / 1' }}
+                  onError={handleImageError}
+                  onLoad={handleImageLoad}
                 />
               ) : (
                 <User size={24} className="text-gray-400" />
@@ -668,6 +711,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                   ({getServiceTypeDescription(profile.service_type)})
                 </span>
               </p>
+              {imageError && profile.avatar_url && (
+                <p className="text-xs text-red-500 mt-1">Profile image failed to load</p>
+              )}
             </div>
           </div>
         </div>

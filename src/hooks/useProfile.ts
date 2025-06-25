@@ -26,6 +26,8 @@ export function useProfile(user: any) {
         return
       }
 
+      console.log('Fetching profile for user:', user.id)
+
       const { data, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
@@ -35,12 +37,29 @@ export function useProfile(user: any) {
       if (fetchError) {
         if (fetchError.code === 'PGRST116') {
           // No profile found - this is expected for new users
+          console.log('No profile found for user:', user.id)
           setProfile(null)
         } else {
           console.error('Error fetching profile:', fetchError)
           setError(fetchError.message)
         }
         return
+      }
+
+      console.log('Profile fetched successfully:', data)
+      
+      // Ensure avatar URL is properly formatted if it exists
+      if (data.avatar_url) {
+        // Check if it's already a full URL
+        if (!data.avatar_url.startsWith('http')) {
+          // If it's just a path, construct the full public URL
+          const { data: { publicUrl } } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(data.avatar_url)
+          
+          console.log('Converting avatar path to public URL:', data.avatar_url, '->', publicUrl)
+          data.avatar_url = publicUrl
+        }
       }
 
       setProfile(data)
@@ -58,6 +77,8 @@ export function useProfile(user: any) {
         throw new Error('No authenticated user')
       }
 
+      console.log('Creating profile with data:', profileData)
+
       const { data, error: createError } = await supabase
         .from('profiles')
         .insert([
@@ -74,6 +95,7 @@ export function useProfile(user: any) {
         throw createError
       }
 
+      console.log('Profile created successfully:', data)
       setProfile(data)
       return data
     } catch (err) {
@@ -88,6 +110,8 @@ export function useProfile(user: any) {
         throw new Error('No authenticated user or profile')
       }
 
+      console.log('Updating profile with:', updates)
+
       const { data, error: updateError } = await supabase
         .from('profiles')
         .update(updates)
@@ -100,6 +124,7 @@ export function useProfile(user: any) {
         throw updateError
       }
 
+      console.log('Profile updated successfully:', data)
       setProfile(data)
       return data
     } catch (err) {
@@ -114,22 +139,55 @@ export function useProfile(user: any) {
         throw new Error('No authenticated user')
       }
 
-      const fileExt = file.name.split('.').pop()
+      console.log('Uploading avatar file:', file.name, 'Size:', file.size)
+
+      // Validate file
+      if (!file.type.startsWith('image/')) {
+        throw new Error('File must be an image')
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('File size must be less than 5MB')
+      }
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase()
       const fileName = `${user.id}/${Date.now()}.${fileExt}`
 
-      const { data, error: uploadError } = await supabase.storage
+      console.log('Uploading to path:', fileName)
+
+      // Upload file to storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, file, {
-          upsert: true
+          upsert: true,
+          contentType: file.type
         })
 
       if (uploadError) {
+        console.error('Upload error:', uploadError)
         throw uploadError
       }
 
+      console.log('File uploaded successfully:', uploadData)
+
+      // Get the public URL
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName)
+
+      console.log('Generated public URL:', publicUrl)
+
+      // Verify the URL is accessible
+      try {
+        const response = await fetch(publicUrl, { method: 'HEAD' })
+        if (!response.ok) {
+          console.warn('Avatar URL may not be accessible:', response.status, response.statusText)
+        } else {
+          console.log('Avatar URL verified as accessible')
+        }
+      } catch (fetchError) {
+        console.warn('Could not verify avatar URL accessibility:', fetchError)
+      }
 
       return { data: publicUrl, error: null }
     } catch (err: any) {
