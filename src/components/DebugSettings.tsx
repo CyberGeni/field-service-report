@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import { Database, Eye, EyeOff } from 'lucide-react';
+import { useStorage } from '../hooks/useStorage';
+import { Database, Eye, EyeOff, RefreshCw } from 'lucide-react';
 
 const DebugSettings: React.FC = () => {
   const [showDebug, setShowDebug] = useState(false);
   const [dbData, setDbData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const { refetch } = useStorage();
 
   const fetchDbData = async () => {
     if (!user) return;
@@ -31,6 +33,12 @@ const DebugSettings: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const forceRefresh = async () => {
+    console.log('🔄 Force refreshing data...');
+    await refetch();
+    await fetchDbData();
   };
 
   if (!showDebug) {
@@ -69,13 +77,21 @@ const DebugSettings: React.FC = () => {
           <p className="text-xs text-gray-600 font-mono break-all">{user?.id || 'Not logged in'}</p>
         </div>
 
-        <div>
+        <div className="flex space-x-2">
           <button
             onClick={fetchDbData}
             disabled={loading}
             className="text-sm bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 disabled:bg-blue-300"
           >
-            {loading ? 'Loading...' : 'Refresh DB Data'}
+            {loading ? 'Loading...' : 'Refresh DB'}
+          </button>
+          <button
+            onClick={forceRefresh}
+            disabled={loading}
+            className="text-sm bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 disabled:bg-green-300 flex items-center space-x-1"
+          >
+            <RefreshCw size={12} />
+            <span>Force Reload</span>
           </button>
         </div>
 
