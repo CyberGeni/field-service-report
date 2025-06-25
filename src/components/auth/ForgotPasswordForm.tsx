@@ -67,20 +67,15 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
     setLoading(true)
     setError('')
 
-    try {
-      const { error } = await onResetPassword(email)
-      
-      if (error) {
-        setError(getErrorMessage(error))
-      } else {
-        setSuccess(true)
-      }
-    } catch (err: any) {
-      console.error('Password reset error:', err)
-      setError('An unexpected error occurred. Please try again.')
-    } finally {
-      setLoading(false)
+    const { error } = await onResetPassword(email)
+    
+    if (error) {
+      setError(getErrorMessage(error))
+    } else {
+      setSuccess(true)
     }
+    
+    setLoading(false)
   }
 
   if (success) {

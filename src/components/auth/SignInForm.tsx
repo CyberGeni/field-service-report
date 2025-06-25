@@ -116,20 +116,13 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
     setLoading(true)
     setErrors({})
 
-    try {
-      const { error } = await onSignIn(email, password)
-      
-      if (error) {
-        setErrors({ general: getErrorMessage(error) })
-      }
-    } catch (err: any) {
-      console.error('Sign in error:', err)
-      setErrors({ 
-        general: 'An unexpected error occurred. Please try again.' 
-      })
-    } finally {
-      setLoading(false)
+    const { error } = await onSignIn(email, password)
+    
+    if (error) {
+      setErrors({ general: getErrorMessage(error) })
     }
+    
+    setLoading(false)
   }
 
   return (
