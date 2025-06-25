@@ -25,9 +25,11 @@ export const useStorage = () => {
   // Load data when user changes
   useEffect(() => {
     if (user) {
+      console.log('🔄 User changed, loading data for:', user.id);
       loadData();
     } else {
       // Clear data when user logs out
+      console.log('🚪 User logged out, clearing data');
       setRecords([]);
       setSettings(DEFAULT_SETTINGS);
       setLoading(false);
@@ -35,25 +37,31 @@ export const useStorage = () => {
   }, [user]);
 
   const parseSettingsFromDatabase = (settingsData: any): Settings => {
-    console.log('📊 Parsing settings from database:', settingsData);
+    console.log('📊 Raw database settings:', JSON.stringify(settingsData, null, 2));
     
     // Parse field service days from database format
     let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
     
     // Try to use the new field_service_days_config column first
-    if (settingsData.field_service_days_config && Array.isArray(settingsData.field_service_days_config)) {
-      try {
-        fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
-          day: fsd.day,
-          type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type, // Convert old format
-          potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
-          label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
-        }));
-        console.log('✅ Successfully parsed field_service_days_config:', fieldServiceDays);
-      } catch (e) {
-        console.warn('⚠️ Failed to parse field_service_days_config:', e);
-        console.warn('Raw field_service_days_config data:', settingsData.field_service_days_config);
-        fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+    if (settingsData.field_service_days_config) {
+      console.log('🔍 Found field_service_days_config:', settingsData.field_service_days_config);
+      
+      if (Array.isArray(settingsData.field_service_days_config)) {
+        try {
+          fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
+            day: fsd.day,
+            type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type, // Convert old format
+            potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
+            label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+          }));
+          console.log('✅ Successfully parsed field_service_days_config:', fieldServiceDays);
+        } catch (e) {
+          console.warn('⚠️ Failed to parse field_service_days_config:', e);
+          console.warn('Raw field_service_days_config data:', settingsData.field_service_days_config);
+          fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+        }
+      } else {
+        console.warn('⚠️ field_service_days_config is not an array:', typeof settingsData.field_service_days_config);
       }
     }
     // Fallback to legacy field_service_days if config is not available
@@ -72,18 +80,24 @@ export const useStorage = () => {
       console.log('⚠️ No field service days found in database, using defaults');
     }
 
-    return {
-      monthlyTarget: settingsData.monthly_target,
-      yearlyTarget: settingsData.yearly_target,
+    const parsedSettings = {
+      monthlyTarget: settingsData.monthly_target || DEFAULT_SETTINGS.monthlyTarget,
+      yearlyTarget: settingsData.yearly_target || DEFAULT_SETTINGS.yearlyTarget,
       fieldServiceDays,
-      serviceYearStart: settingsData.service_year_start,
+      serviceYearStart: settingsData.service_year_start || DEFAULT_SETTINGS.serviceYearStart,
       username: '', // We'll get this from profile
       password: '' // Not stored in database
     };
+
+    console.log('📋 Final parsed settings:', JSON.stringify(parsedSettings, null, 2));
+    return parsedSettings;
   };
 
   const loadData = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('❌ No user, cannot load data');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -98,7 +112,10 @@ export const useStorage = () => {
         .eq('user_id', user.id)
         .order('date', { ascending: false });
 
-      if (recordsError) throw recordsError;
+      if (recordsError) {
+        console.error('❌ Error loading records:', recordsError);
+        throw recordsError;
+      }
 
       // Transform database records to match our ServiceRecord type
       const transformedRecords: ServiceRecord[] = (recordsData || []).map(record => ({
@@ -113,31 +130,32 @@ export const useStorage = () => {
       setRecords(transformedRecords);
       console.log('✅ Loaded service records:', transformedRecords.length, 'records');
 
-      // Load user settings - always get the latest from database
+      // Load user settings - ALWAYS get from database, never use defaults unless no record exists
+      console.log('🔍 Querying user_settings table...');
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
         .select('*')
         .eq('user_id', user.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .single(); // Use single() instead of maybeSingle() to ensure we get an error if no record
 
-      if (settingsError && settingsError.code !== 'PGRST116') {
-        throw settingsError;
-      }
+      console.log('📊 Settings query result:', { settingsData, settingsError });
 
-      if (settingsData) {
-        console.log('📊 Raw settings data from database:', settingsData);
-        
+      if (settingsError) {
+        if (settingsError.code === 'PGRST116') {
+          // No settings found - this is a new user
+          console.log('📝 No settings found for user, creating default settings');
+          await createDefaultSettings();
+        } else {
+          console.error('❌ Error loading settings:', settingsError);
+          throw settingsError;
+        }
+      } else if (settingsData) {
+        console.log('📊 Found settings in database, parsing...');
         const loadedSettings = parseSettingsFromDatabase(settingsData);
-        
-        console.log('✅ Final loaded settings:', loadedSettings);
-        console.log('🎯 Field service days loaded:', loadedSettings.fieldServiceDays);
-        
+        console.log('✅ Settings loaded and parsed successfully');
         setSettings(loadedSettings);
       } else {
-        console.log('📝 No settings found, creating default settings');
-        // Create default settings for new user
+        console.log('📝 No settings data returned, creating defaults');
         await createDefaultSettings();
       }
     } catch (err: any) {
@@ -149,31 +167,43 @@ export const useStorage = () => {
   };
 
   const createDefaultSettings = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('❌ No user, cannot create default settings');
+      return;
+    }
 
     try {
       console.log('📝 Creating default settings for user:', user.id);
       console.log('📝 Default field service days:', DEFAULT_SETTINGS.fieldServiceDays);
       
+      const insertData = {
+        user_id: user.id,
+        monthly_target: DEFAULT_SETTINGS.monthlyTarget,
+        yearly_target: DEFAULT_SETTINGS.yearlyTarget,
+        field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
+        field_service_days_config: DEFAULT_SETTINGS.fieldServiceDays, // New format
+        service_year_start: DEFAULT_SETTINGS.serviceYearStart
+      };
+
+      console.log('📝 Inserting default settings:', JSON.stringify(insertData, null, 2));
+
       const { data, error } = await supabase
         .from('user_settings')
-        .insert({
-          user_id: user.id,
-          monthly_target: DEFAULT_SETTINGS.monthlyTarget,
-          yearly_target: DEFAULT_SETTINGS.yearlyTarget,
-          field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
-          field_service_days_config: DEFAULT_SETTINGS.fieldServiceDays, // New format
-          service_year_start: DEFAULT_SETTINGS.serviceYearStart
-        })
+        .insert(insertData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error creating default settings:', error);
+        throw error;
+      }
       
-      console.log('✅ Default settings created successfully');
+      console.log('✅ Default settings created successfully:', data);
       setSettings(DEFAULT_SETTINGS);
     } catch (err: any) {
       console.error('❌ Error creating default settings:', err);
+      // Don't throw here - just use defaults in memory
+      setSettings(DEFAULT_SETTINGS);
     }
   };
 
@@ -339,6 +369,9 @@ export const useStorage = () => {
       const updatedSettings = { ...settings, ...newSettings };
 
       console.log('💾 Updating settings...');
+      console.log('💾 Current settings:', JSON.stringify(settings, null, 2));
+      console.log('💾 New settings:', JSON.stringify(newSettings, null, 2));
+      console.log('💾 Updated settings:', JSON.stringify(updatedSettings, null, 2));
       console.log('💾 Field service days to save:', updatedSettings.fieldServiceDays);
 
       // Prepare the update data
@@ -351,7 +384,7 @@ export const useStorage = () => {
         service_year_start: updatedSettings.serviceYearStart
       };
 
-      console.log('💾 Saving to database:', updateData);
+      console.log('💾 Saving to database:', JSON.stringify(updateData, null, 2));
 
       // Save to database
       const { data, error } = await supabase
@@ -367,27 +400,28 @@ export const useStorage = () => {
         throw error;
       }
 
-      console.log('✅ Settings saved to database successfully');
+      console.log('✅ Settings saved to database successfully:', data);
 
       // Update local state
       setSettings(updatedSettings);
       console.log('✅ Local settings updated');
 
-      // Verify the save worked
+      // Verify the save worked by reading back from database
       setTimeout(async () => {
         console.log('🔍 Verifying save...');
         const { data: verifyData, error: verifyError } = await supabase
           .from('user_settings')
-          .select('field_service_days_config')
+          .select('*')
           .eq('user_id', user.id)
           .single();
 
         if (verifyError) {
           console.error('❌ Verification failed:', verifyError);
         } else {
-          console.log('🔍 Verification successful - field service days in DB:', verifyData.field_service_days_config);
+          console.log('🔍 Verification successful - complete settings in DB:', JSON.stringify(verifyData, null, 2));
+          console.log('🔍 Field service days config in DB:', verifyData.field_service_days_config);
         }
-      }, 500);
+      }, 1000);
 
     } catch (err: any) {
       console.error('❌ Error updating settings:', err);
