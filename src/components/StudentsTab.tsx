@@ -279,7 +279,7 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
           </div>
           
           <p className="text-gray-600 mb-6">
-            Are you sure you want to delete <strong>{studentName}</strong>? This action cannot be undone.
+            Are you sure you want to delete <strong>{studentName}</strong> from your records? This action cannot be undone.
           </p>
 
           <div className="flex space-x-3">
