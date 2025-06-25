@@ -23,12 +23,13 @@ export const useStorage = () => {
   const { user } = useAuth();
   const loadingRef = useRef(false);
   const settingsLoadedRef = useRef(false);
+  const initialLoadCompleteRef = useRef(false);
 
   // Set up real-time subscription for settings changes
   useEffect(() => {
     if (!user) return;
 
-    console.log('Setting up real-time subscription for user:', user.id);
+    console.log('🔄 Setting up real-time subscription for user:', user.id);
 
     const subscription = supabase
       .channel('user_settings_changes')
@@ -41,18 +42,19 @@ export const useStorage = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          console.log('Real-time settings change detected:', payload);
+          console.log('📡 Real-time settings change detected:', payload);
           if (payload.new && payload.eventType !== 'DELETE') {
             const newSettings = parseSettingsFromDatabase(payload.new);
-            console.log('Updating settings from real-time:', newSettings);
+            console.log('🔄 Updating settings from real-time:', newSettings);
             setSettings(newSettings);
+            settingsLoadedRef.current = true;
           }
         }
       )
       .subscribe();
 
     return () => {
-      console.log('Cleaning up real-time subscription');
+      console.log('🧹 Cleaning up real-time subscription');
       subscription.unsubscribe();
     };
   }, [user]);
@@ -60,13 +62,19 @@ export const useStorage = () => {
   // Load data when user changes
   useEffect(() => {
     if (user) {
+      console.log('👤 User changed, loading data for:', user.id);
+      // Reset refs when user changes
+      settingsLoadedRef.current = false;
+      initialLoadCompleteRef.current = false;
       loadData();
     } else {
       // Clear data when user logs out
+      console.log('🚪 User logged out, clearing data');
       setRecords([]);
       setSettings(DEFAULT_SETTINGS);
       setLoading(false);
       settingsLoadedRef.current = false;
+      initialLoadCompleteRef.current = false;
     }
   }, [user]);
 
@@ -82,15 +90,15 @@ export const useStorage = () => {
           potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
           label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
         }));
-        console.log('Using field_service_days_config:', fieldServiceDays);
+        console.log('✅ Using field_service_days_config:', fieldServiceDays);
       } catch (e) {
-        console.warn('Failed to parse field_service_days_config:', e);
+        console.warn('⚠️ Failed to parse field_service_days_config:', e);
         fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
       }
     }
     // Fallback to legacy field_service_days if config is not available
     else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
-      console.log('Converting legacy field_service_days:', settingsData.field_service_days);
+      console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
       // Convert legacy format to new format
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
@@ -112,14 +120,17 @@ export const useStorage = () => {
   };
 
   const loadData = async () => {
-    if (!user || loadingRef.current) return;
+    if (!user || loadingRef.current) {
+      console.log('⏭️ Skipping load - no user or already loading');
+      return;
+    }
 
     try {
       loadingRef.current = true;
       setLoading(true);
       setError(null);
 
-      console.log('Loading data for user:', user.id);
+      console.log('📥 Loading data for user:', user.id);
 
       // Load service records
       const { data: recordsData, error: recordsError } = await supabase
@@ -131,7 +142,6 @@ export const useStorage = () => {
       if (recordsError) throw recordsError;
 
       // Transform database records to match our ServiceRecord type
-      // Convert 'rv' type to 'h2h' since we merged them
       const transformedRecords: ServiceRecord[] = (recordsData || []).map(record => ({
         id: record.id,
         date: record.date,
@@ -142,16 +152,18 @@ export const useStorage = () => {
       }));
 
       setRecords(transformedRecords);
+      console.log('✅ Loaded', transformedRecords.length, 'service records');
 
-      // Load user settings with retry mechanism
+      // Load user settings - this is the critical part
       await loadUserSettings();
 
     } catch (err: any) {
-      console.error('Error loading data:', err);
+      console.error('❌ Error loading data:', err);
       setError(err.message);
     } finally {
       setLoading(false);
       loadingRef.current = false;
+      initialLoadCompleteRef.current = true;
     }
   };
 
@@ -159,8 +171,9 @@ export const useStorage = () => {
     if (!user) return;
 
     try {
-      console.log('Loading user settings, attempt:', retryCount + 1);
+      console.log('⚙️ Loading user settings, attempt:', retryCount + 1);
 
+      // First, check if settings exist in the database
       const { data: settingsData, error: settingsError } = await supabase
         .from('user_settings')
         .select('*')
@@ -172,29 +185,37 @@ export const useStorage = () => {
       }
 
       if (settingsData) {
-        console.log('Loaded settings from database:', settingsData);
+        console.log('✅ Found existing settings in database:', settingsData);
         const loadedSettings = parseSettingsFromDatabase(settingsData);
-        console.log('Final loaded settings:', loadedSettings);
+        console.log('🎯 Parsed settings:', loadedSettings);
         setSettings(loadedSettings);
         settingsLoadedRef.current = true;
       } else {
-        console.log('No settings found, creating default settings');
-        // Only create default settings if we haven't loaded any yet
-        if (!settingsLoadedRef.current) {
+        console.log('❌ No settings found in database');
+        
+        // CRITICAL: Only create default settings if this is truly a new user
+        // Check if we've already loaded settings before (to prevent overwriting on device switch)
+        if (!settingsLoadedRef.current && !initialLoadCompleteRef.current) {
+          console.log('🆕 Creating default settings for new user');
           await createDefaultSettings();
+        } else {
+          console.log('⚠️ Settings not found but user has loaded before - keeping current settings');
+          // Don't overwrite existing settings, just mark as loaded
+          settingsLoadedRef.current = true;
         }
       }
     } catch (err: any) {
-      console.error('Error loading settings:', err);
+      console.error('❌ Error loading settings:', err);
       
       // Retry up to 3 times with exponential backoff
       if (retryCount < 3) {
         const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
-        console.log(`Retrying settings load in ${delay}ms...`);
+        console.log(`🔄 Retrying settings load in ${delay}ms...`);
         setTimeout(() => loadUserSettings(retryCount + 1), delay);
       } else {
-        console.error('Failed to load settings after 3 retries');
+        console.error('💥 Failed to load settings after 3 retries');
         if (!settingsLoadedRef.current) {
+          console.log('🔧 Using default settings as fallback');
           setSettings(DEFAULT_SETTINGS);
           settingsLoadedRef.current = true;
         }
@@ -206,8 +227,21 @@ export const useStorage = () => {
     if (!user) return;
 
     try {
-      console.log('Creating default settings for user:', user.id);
+      console.log('🆕 Creating default settings for user:', user.id);
       
+      // Double-check that settings don't already exist
+      const { data: existingSettings } = await supabase
+        .from('user_settings')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (existingSettings) {
+        console.log('⚠️ Settings already exist, loading them instead');
+        await loadUserSettings();
+        return;
+      }
+
       const { data, error } = await supabase
         .from('user_settings')
         .insert({
@@ -222,21 +256,22 @@ export const useStorage = () => {
         .single();
 
       if (error) {
-        // If the error is due to a unique constraint violation, it means settings already exist
+        // If the error is due to a unique constraint violation, settings already exist
         if (error.code === '23505') {
-          console.log('Settings already exist, loading them instead');
+          console.log('⚠️ Settings already exist (constraint violation), loading them instead');
           await loadUserSettings();
           return;
         }
         throw error;
       }
       
-      console.log('Default settings created successfully:', data);
+      console.log('✅ Default settings created successfully:', data);
       setSettings(DEFAULT_SETTINGS);
       settingsLoadedRef.current = true;
     } catch (err: any) {
-      console.error('Error creating default settings:', err);
+      console.error('❌ Error creating default settings:', err);
       // If creation fails, just use default settings locally
+      console.log('🔧 Using default settings locally due to creation error');
       setSettings(DEFAULT_SETTINGS);
       settingsLoadedRef.current = true;
     }
@@ -358,7 +393,7 @@ export const useStorage = () => {
       }
 
     } catch (err: any) {
-      console.error('Error saving record:', err);
+      console.error('❌ Error saving record:', err);
       setError(err.message);
       throw err; // Re-throw to allow UI to handle the error
     }
@@ -386,7 +421,7 @@ export const useStorage = () => {
       setRecords(updatedRecords);
 
     } catch (err: any) {
-      console.error('Error deleting record:', err);
+      console.error('❌ Error deleting record:', err);
       setError(err.message);
       throw err; // Re-throw to allow UI to handle the error
     }
@@ -413,7 +448,7 @@ export const useStorage = () => {
         service_year_start: updatedSettings.serviceYearStart
       };
 
-      console.log('Updating settings with data:', updateData);
+      console.log('💾 Updating settings with data:', updateData);
 
       // Use upsert to handle both insert and update cases
       const { data, error } = await supabase
@@ -425,18 +460,19 @@ export const useStorage = () => {
         .single();
 
       if (error) {
-        console.error('Database error:', error);
+        console.error('❌ Database error:', error);
         throw error;
       }
 
-      console.log('Settings updated successfully in database:', data);
+      console.log('✅ Settings updated successfully in database:', data);
 
       // Update local state only after successful database update
       setSettings(updatedSettings);
-      console.log('Local settings updated:', updatedSettings);
+      settingsLoadedRef.current = true;
+      console.log('🎯 Local settings updated:', updatedSettings);
 
     } catch (err: any) {
-      console.error('Error updating settings:', err);
+      console.error('❌ Error updating settings:', err);
       setError(err.message);
       throw err; // Re-throw to allow UI to handle the error
     }
@@ -446,8 +482,10 @@ export const useStorage = () => {
   const forceRefresh = async () => {
     if (!user) return;
     
-    console.log('Force refreshing data...');
+    console.log('🔄 Force refreshing data...');
+    // Reset the loaded flag to force a fresh load
     settingsLoadedRef.current = false;
+    initialLoadCompleteRef.current = false;
     await loadData();
   };
 

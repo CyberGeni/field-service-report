@@ -10,6 +10,7 @@ import SignInForm from './components/auth/SignInForm';
 import SignUpForm from './components/auth/SignUpForm';
 import ForgotPasswordForm from './components/auth/ForgotPasswordForm';
 import ProfileSetup from './components/ProfileSetup';
+import DebugSettings from './components/DebugSettings';
 import { ToastProvider } from './components/ui/toast';
 import { useStorage } from './hooks/useStorage';
 import { useTimer } from './hooks/useTimer';
@@ -184,6 +185,9 @@ function App() {
           />
         </div>
       </div>
+
+      {/* Debug component for development */}
+      <DebugSettings />
     </ToastProvider>
   );
 }
