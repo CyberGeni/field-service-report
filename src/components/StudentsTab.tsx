@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Users, Search, Plus, Edit, Trash2, X, Calendar, MapPin, BookOpen, Clock, User } from 'lucide-react';
-import { Student } from '../types';
+import { Users, Search, Plus, Edit, Trash2, X, Calendar, MapPin, BookOpen, Clock, User, ArrowLeft, Eye } from 'lucide-react';
+import { Student, StudentVisit } from '../types';
 import { useStudents } from '../hooks/useStudents';
 import { useToast } from './ui/toast';
 
@@ -25,6 +25,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
     name: '',
     address: '',
     publication_left: '',
+    place_stopped: '',
     date_met: '',
     last_visit_date: '',
     last_study_notes: ''
@@ -41,6 +42,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
           name: student.name,
           address: student.address,
           publication_left: student.publication_left || '',
+          place_stopped: student.place_stopped || '',
           date_met: student.date_met,
           last_visit_date: student.last_visit_date || '',
           last_study_notes: student.last_study_notes || ''
@@ -50,6 +52,7 @@ const StudentModal: React.FC<StudentModalProps> = ({
           name: '',
           address: '',
           publication_left: '',
+          place_stopped: '',
           date_met: new Date().toISOString().split('T')[0],
           last_visit_date: '',
           last_study_notes: ''
@@ -92,15 +95,6 @@ const StudentModal: React.FC<StudentModalProps> = ({
     } finally {
       setSaving(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
   };
 
   if (!isOpen) return null;
@@ -173,6 +167,21 @@ const StudentModal: React.FC<StudentModalProps> = ({
                 onChange={(e) => setFormData(prev => ({ ...prev, publication_left: e.target.value }))}
                 className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="e.g., What Does the Bible Really Teach?"
+                disabled={saving}
+              />
+            </div>
+
+            {/* Place Stopped */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Current Place in Study
+              </label>
+              <input
+                type="text"
+                value={formData.place_stopped}
+                onChange={(e) => setFormData(prev => ({ ...prev, place_stopped: e.target.value }))}
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Chapter 3, paragraph 12"
                 disabled={saving}
               />
             </div>
@@ -250,6 +259,421 @@ const StudentModal: React.FC<StudentModalProps> = ({
   );
 };
 
+interface VisitModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (visit: Omit<StudentVisit, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  onUpdate?: (id: string, updates: Partial<Omit<StudentVisit, 'id' | 'user_id' | 'student_id' | 'created_at' | 'updated_at'>>) => Promise<void>;
+  studentId: string;
+  studentName: string;
+  visit?: StudentVisit | null;
+  mode: 'add' | 'edit';
+}
+
+const VisitModal: React.FC<VisitModalProps> = ({
+  isOpen,
+  onClose,
+  onSave,
+  onUpdate,
+  studentId,
+  studentName,
+  visit,
+  mode
+}) => {
+  const [formData, setFormData] = useState({
+    visit_date: '',
+    place_stopped: '',
+    notes: ''
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  // Reset form when modal opens/closes or visit changes
+  React.useEffect(() => {
+    if (isOpen) {
+      if (mode === 'edit' && visit) {
+        setFormData({
+          visit_date: visit.visit_date,
+          place_stopped: visit.place_stopped || '',
+          notes: visit.notes || ''
+        });
+      } else {
+        setFormData({
+          visit_date: new Date().toISOString().split('T')[0],
+          place_stopped: '',
+          notes: ''
+        });
+      }
+      setError('');
+    }
+  }, [isOpen, mode, visit]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.visit_date) {
+      setError('Visit date is required');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+
+    try {
+      if (mode === 'edit' && visit && onUpdate) {
+        await onUpdate(visit.id, formData);
+      } else {
+        await onSave({
+          student_id: studentId,
+          ...formData
+        });
+      }
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to save visit');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-md w-full">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {mode === 'edit' ? 'Edit Visit' : 'Record Visit'}
+              </h3>
+              <p className="text-sm text-gray-600">{studentName}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X size={20} className="text-gray-500" />
+            </button>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4">
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Visit Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Visit Date *
+              </label>
+              <input
+                type="date"
+                value={formData.visit_date}
+                onChange={(e) => setFormData(prev => ({ ...prev, visit_date: e.target.value }))}
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={saving}
+                required
+              />
+            </div>
+
+            {/* Place Stopped */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Where We Stopped
+              </label>
+              <input
+                type="text"
+                value={formData.place_stopped}
+                onChange={(e) => setFormData(prev => ({ ...prev, place_stopped: e.target.value }))}
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Chapter 3, paragraph 12"
+                disabled={saving}
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Visit Notes
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                rows={4}
+                placeholder="Add notes about this visit..."
+                disabled={saving}
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex space-x-3 mt-6">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={saving}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving || !formData.visit_date}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center"
+              >
+                {saving ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  mode === 'edit' ? 'Update Visit' : 'Record Visit'
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface StudentDetailsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  student: Student;
+  onEditStudent: (student: Student) => void;
+  onDeleteStudent: (student: Student) => void;
+  onRecordVisit: (studentId: string, studentName: string) => void;
+}
+
+const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
+  isOpen,
+  onClose,
+  student,
+  onEditStudent,
+  onDeleteStudent,
+  onRecordVisit
+}) => {
+  const [visits, setVisits] = useState<StudentVisit[]>([]);
+  const [loadingVisits, setLoadingVisits] = useState(false);
+  const { loadStudentVisits } = useStudents();
+
+  // Load visits when modal opens
+  React.useEffect(() => {
+    if (isOpen && student) {
+      loadVisits();
+    }
+  }, [isOpen, student]);
+
+  const loadVisits = async () => {
+    setLoadingVisits(true);
+    try {
+      const visitsData = await loadStudentVisits(student.id);
+      setVisits(visitsData);
+    } catch (error) {
+      console.error('Failed to load visits:', error);
+    } finally {
+      setLoadingVisits(false);
+    }
+  };
+
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!dateString) return 'Never visited';
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const getTimeSinceLastVisit = (lastVisitDate: string | null | undefined) => {
+    if (!lastVisitDate) return null;
+    
+    const lastVisit = new Date(lastVisitDate);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - lastVisit.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) return '1 day ago';
+    if (diffDays < 7) return `${diffDays} days ago`;
+    if (diffDays < 14) return '1 week ago';
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+    if (diffDays < 60) return '1 month ago';
+    return `${Math.floor(diffDays / 30)} months ago`;
+  };
+
+  if (!isOpen) return null;
+
+  const timeSinceLastVisit = getTimeSinceLastVisit(student.last_visit_date);
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft size={20} className="text-gray-500" />
+              </button>
+              <div>
+                <h3 className="text-xl font-semibold text-gray-800">{student.name}</h3>
+                <p className="text-sm text-gray-600">Student Details</p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-2">
+              <button
+                onClick={() => onRecordVisit(student.id, student.name)}
+                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
+              >
+                <Plus size={16} />
+                <span>Record Visit</span>
+              </button>
+              <button
+                onClick={() => onEditStudent(student)}
+                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                title="Edit student"
+              >
+                <Edit size={18} />
+              </button>
+              <button
+                onClick={() => onDeleteStudent(student)}
+                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                title="Delete student"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Student Info */}
+          <div className="bg-gray-50 rounded-xl p-4 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-start space-x-3">
+                  <MapPin size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Address</p>
+                    <p className="text-sm text-gray-600">{student.address}</p>
+                  </div>
+                </div>
+                
+                {student.publication_left && (
+                  <div className="flex items-start space-x-3">
+                    <BookOpen size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Publication</p>
+                      <p className="text-sm text-gray-600">{student.publication_left}</p>
+                    </div>
+                  </div>
+                )}
+
+                {student.place_stopped && (
+                  <div className="flex items-start space-x-3">
+                    <BookOpen size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">Current Place</p>
+                      <p className="text-sm text-gray-600">{student.place_stopped}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-start space-x-3">
+                  <Calendar size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Date Met</p>
+                    <p className="text-sm text-gray-600">{formatDate(student.date_met)}</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-3">
+                  <Clock size={16} className="text-gray-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Last Visit</p>
+                    <p className="text-sm text-gray-600">
+                      {formatDate(student.last_visit_date)}
+                      {timeSinceLastVisit && (
+                        <span className="text-gray-500 ml-1">({timeSinceLastVisit})</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {student.last_study_notes && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm font-medium text-gray-700 mb-1">Last Study Notes:</p>
+                <p className="text-sm text-gray-600">{student.last_study_notes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Visit History */}
+          <div>
+            <h4 className="text-lg font-semibold text-gray-800 mb-4">Visit History</h4>
+            
+            {loadingVisits ? (
+              <div className="text-center py-8">
+                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading visits...</p>
+              </div>
+            ) : visits.length > 0 ? (
+              <div className="space-y-3 max-h-60 overflow-y-auto">
+                {visits.map((visit) => (
+                  <div key={visit.id} className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <Calendar size={16} className="text-blue-500 flex-shrink-0" />
+                        <div>
+                          <p className="font-medium text-gray-800">
+                            {new Date(visit.visit_date).toLocaleDateString('en-US', {
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </p>
+                          {visit.place_stopped && (
+                            <p className="text-sm text-gray-600">
+                              Stopped at: {visit.place_stopped}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {visit.notes && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                        <p className="text-sm text-gray-700">{visit.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+                <p className="font-medium">No visits recorded yet</p>
+                <p className="text-sm">Record your first visit to start tracking progress</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 interface DeleteConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -279,7 +703,7 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
           </div>
           
           <p className="text-gray-600 mb-6">
-            Are you sure you want to delete <strong>{studentName}</strong> from your records? This action cannot be undone.
+            Are you sure you want to delete <strong>{studentName}</strong> from your records? This action cannot be undone and will also delete all visit history.
           </p>
 
           <div className="flex space-x-3">
@@ -309,7 +733,7 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
 };
 
 const StudentsTab: React.FC = () => {
-  const { students, loading, saveStudent, updateStudent, deleteStudent } = useStudents();
+  const { students, loading, saveStudent, updateStudent, deleteStudent, saveStudentVisit } = useStudents();
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
@@ -317,12 +741,18 @@ const StudentsTab: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showVisitModal, setShowVisitModal] = useState(false);
+  const [visitModalMode, setVisitModalMode] = useState<'add' | 'edit'>('add');
+  const [visitStudentId, setVisitStudentId] = useState('');
+  const [visitStudentName, setVisitStudentName] = useState('');
 
   // Filter students based on search query
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     student.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (student.publication_left && student.publication_left.toLowerCase().includes(searchQuery.toLowerCase()))
+    (student.publication_left && student.publication_left.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (student.place_stopped && student.place_stopped.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleAddStudent = () => {
@@ -340,6 +770,19 @@ const StudentsTab: React.FC = () => {
   const handleDeleteStudent = (student: Student) => {
     setStudentToDelete(student);
     setShowDeleteModal(true);
+  };
+
+  const handleViewStudent = (student: Student) => {
+    setSelectedStudent(student);
+    setShowDetailsModal(true);
+  };
+
+  const handleRecordVisit = (studentId: string, studentName: string) => {
+    setVisitStudentId(studentId);
+    setVisitStudentName(studentName);
+    setVisitModalMode('add');
+    setShowVisitModal(true);
+    setShowDetailsModal(false); // Close details modal if open
   };
 
   const confirmDelete = async () => {
@@ -441,7 +884,11 @@ const StudentsTab: React.FC = () => {
             const timeSinceLastVisit = getTimeSinceLastVisit(student.last_visit_date);
             
             return (
-              <div key={student.id} className="bg-white rounded-xl p-6">
+              <div 
+                key={student.id} 
+                className="bg-white rounded-xl p-6 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => handleViewStudent(student)}
+              >
                 <div className="w-full">
                   {/* Header with name and action buttons */}
                   <div className="flex items-center justify-between mb-4">
@@ -450,7 +897,14 @@ const StudentsTab: React.FC = () => {
                       <h3 className="text-lg font-semibold text-gray-800">{student.name}</h3>
                     </div>
                     
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-2" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => handleViewStudent(student)}
+                        className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                        title="View details"
+                      >
+                        <Eye size={18} />
+                      </button>
                       <button
                         onClick={() => handleEditStudent(student)}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -479,6 +933,13 @@ const StudentsTab: React.FC = () => {
                       <div className="flex items-center space-x-3">
                         <BookOpen size={16} className="text-gray-400 flex-shrink-0" />
                         <p className="text-gray-600 text-sm">{student.publication_left}</p>
+                      </div>
+                    )}
+
+                    {student.place_stopped && (
+                      <div className="flex items-center space-x-3">
+                        <BookOpen size={16} className="text-gray-400 flex-shrink-0" />
+                        <p className="text-gray-600 text-sm">Currently at: {student.place_stopped}</p>
                       </div>
                     )}
                     
@@ -554,6 +1015,28 @@ const StudentsTab: React.FC = () => {
         onUpdate={updateStudent}
         student={selectedStudent}
         mode={modalMode}
+      />
+
+      {/* Student Details Modal */}
+      {selectedStudent && (
+        <StudentDetailsModal
+          isOpen={showDetailsModal}
+          onClose={() => setShowDetailsModal(false)}
+          student={selectedStudent}
+          onEditStudent={handleEditStudent}
+          onDeleteStudent={handleDeleteStudent}
+          onRecordVisit={handleRecordVisit}
+        />
+      )}
+
+      {/* Visit Modal */}
+      <VisitModal
+        isOpen={showVisitModal}
+        onClose={() => setShowVisitModal(false)}
+        onSave={saveStudentVisit}
+        studentId={visitStudentId}
+        studentName={visitStudentName}
+        mode={visitModalMode}
       />
 
       {/* Delete Confirmation Modal */}

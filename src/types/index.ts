@@ -38,9 +38,21 @@ export interface Student {
   name: string;
   address: string;
   publication_left?: string;
+  place_stopped?: string;
   date_met: string;
   last_visit_date?: string;
   last_study_notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StudentVisit {
+  id: string;
+  student_id: string;
+  user_id: string;
+  visit_date: string;
+  place_stopped?: string;
+  notes?: string;
   created_at: string;
   updated_at: string;
 }
