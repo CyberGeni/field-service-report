@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { ServiceRecord, Settings, FieldServiceDay } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
+import { useToast } from '../components/ui/toast';
 
 const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
@@ -21,6 +22,7 @@ export const useStorage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
+  const { addToast } = useToast();
   const loadingRef = useRef(false);
   const settingsLoadedRef = useRef(false);
   const initialLoadCompleteRef = useRef(false);
@@ -80,6 +82,7 @@ export const useStorage = () => {
 
   const parseSettingsFromDatabase = (settingsData: any): Settings => {
     let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+    let wasLegacyConverted = false;
     
     // Try to use the new field_service_days_config column first
     if (settingsData.field_service_days_config && Array.isArray(settingsData.field_service_days_config)) {
@@ -99,14 +102,26 @@ export const useStorage = () => {
     // Fallback to legacy field_service_days if config is not available
     else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
       console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
-      // Convert legacy format to new format
+      wasLegacyConverted = true;
+      
+      // Convert legacy format to new format with consistent defaults
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
+      fieldServiceDays = settingsData.field_service_days.map((day: number) => ({
         day,
-        type: index % 2 === 0 ? 'h2h' : 'cart',
-        potentialHours: index % 2 === 0 ? 4 : 2,
-        label: `${dayNames[day]} - ${index % 2 === 0 ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+        type: 'h2h' as const, // Set all to h2h for consistency
+        potentialHours: 3, // Set consistent default hours
+        label: `${dayNames[day]} - House to House/Return Visits`
       }));
+
+      // Notify user about the conversion
+      if (addToast) {
+        addToast({
+          type: 'info',
+          title: 'Settings Updated',
+          description: 'Your field service days have been updated to the new format. Please review and save your settings in the Settings tab to complete the update.',
+          duration: 8000
+        });
+      }
     }
 
     return {
