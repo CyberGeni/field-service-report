@@ -32,6 +32,19 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface Student {
+  id: string;
+  user_id: string;
+  name: string;
+  address: string;
+  publication_left?: string;
+  date_met: string;
+  last_visit_date?: string;
+  last_study_notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TimerState {
   isRunning: boolean;
   isPaused: boolean;
