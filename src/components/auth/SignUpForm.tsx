@@ -34,13 +34,11 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
       newErrors.email = 'Please enter a valid email address'
     }
 
-    // Password validation
+    // Password validation - only require 6 characters minimum
     if (!password) {
       newErrors.password = 'Password is required'
     } else if (password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters'
-    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
-      newErrors.password = 'Password must contain at least one uppercase letter, one lowercase letter, and one number'
     }
 
     // Confirm password validation
@@ -76,12 +74,12 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
       return 'Please enter a valid email address.'
     }
     
-    // Check for password issues
+    // Check for password issues - simplified for 6 character minimum
     if (message.includes('weak password') || 
         message.includes('password too weak') ||
         message.includes('password must be') ||
         message.includes('password should be')) {
-      return 'Password is too weak. Please use at least 6 characters with uppercase, lowercase, and numbers.'
+      return 'Password must be at least 6 characters long.'
     }
     
     // Check for signup disabled
@@ -124,7 +122,7 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
     }
     
     if (message.includes('password')) {
-      return 'Password requirements not met. Please use at least 6 characters with uppercase, lowercase, and numbers.'
+      return 'Password must be at least 6 characters long.'
     }
     
     // If we have a short, readable error message, use it
@@ -272,7 +270,7 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
               <p className="text-red-600 text-sm mt-1">{errors.password}</p>
             )}
             <p className="text-gray-500 text-xs mt-1">
-              Must be at least 6 characters with uppercase, lowercase, and number
+              Must be at least 6 characters
             </p>
           </div>
 
