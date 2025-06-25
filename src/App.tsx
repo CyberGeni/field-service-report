@@ -10,7 +10,7 @@ import SignInForm from './components/auth/SignInForm';
 import SignUpForm from './components/auth/SignUpForm';
 import ForgotPasswordForm from './components/auth/ForgotPasswordForm';
 import ProfileSetup from './components/ProfileSetup';
-import DebugSettings from './components/DebugSettings';
+import { ToastProvider } from './components/ui/toast';
 import { useStorage } from './hooks/useStorage';
 import { useTimer } from './hooks/useTimer';
 import { useAuth } from './hooks/useAuth';
@@ -22,7 +22,7 @@ type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [authView, setAuthView] = useState<AuthView>('splash');
-  const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings, forceRefresh } = useStorage();
+  const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings } = useStorage();
   const { timerState, startTimer, pauseTimer, stopTimer } = useTimer();
   const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
   const { profile, loading: profileLoading, createProfile, updateProfile, uploadAvatar, getDefaultTargets } = useProfile(user);
@@ -158,8 +158,7 @@ function App() {
             onUpdateSettings={updateSettings} 
             onUpdateProfile={updateProfile}
             onUploadAvatar={uploadAvatar}
-            onSignOut={signOut}
-            onForceRefresh={forceRefresh}
+            onSignOut={signOut} 
           />
         );
       default:
@@ -168,24 +167,23 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 pb-20">
-      <div className="max-w-md mx-auto">
-        {/* Main Content */}
-        <main className="p-6 pt-8">
-          {renderActiveTab()}
-        </main>
+    <ToastProvider>
+      <div className="min-h-screen bg-gradient-to-br from-white to-gray-100 pb-20">
+        <div className="max-w-md mx-auto">
+          {/* Main Content */}
+          <main className="p-6 pt-8">
+            {renderActiveTab()}
+          </main>
 
-        {/* Navigation with timer indicator */}
-        <Navigation 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab}
-          timerRunning={timerState.isRunning && !timerState.isPaused}
-        />
+          {/* Navigation with timer indicator */}
+          <Navigation 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab}
+            timerRunning={timerState.isRunning && !timerState.isPaused}
+          />
+        </div>
       </div>
-
-      {/* Debug component for development */}
-      <DebugSettings />
-    </div>
+    </ToastProvider>
   );
 }
 

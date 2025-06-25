@@ -493,17 +493,6 @@ export const useStorage = () => {
     }
   };
 
-  // Force refresh function for manual sync
-  const forceRefresh = async () => {
-    if (!user) return;
-    
-    console.log('🔄 Force refreshing data...');
-    // Reset the loaded flag to force a fresh load
-    settingsLoadedRef.current = false;
-    initialLoadCompleteRef.current = false;
-    await loadData();
-  };
-
   return {
     records,
     settings,
@@ -512,7 +501,6 @@ export const useStorage = () => {
     saveRecord,
     deleteRecord,
     updateSettings,
-    refetch: loadData,
-    forceRefresh
+    refetch: loadData
   };
 };
