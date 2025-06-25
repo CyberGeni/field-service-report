@@ -255,10 +255,6 @@ const EntryModal: React.FC<EntryModalProps> = ({
                 </div>
               </div>
             )}
-
-            {/* Info about zero values */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
-            </div>
           </div>
 
           {/* Actions */}
