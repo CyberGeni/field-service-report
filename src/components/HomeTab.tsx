@@ -202,7 +202,6 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    {getServiceTypeIcon(suggestion.type)}
                     <div>
                       <p className="font-medium">
                         {formatSuggestionDate(suggestion.date)}
