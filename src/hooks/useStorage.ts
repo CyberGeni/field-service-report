@@ -20,6 +20,7 @@ export const useStorage = () => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const { user } = useAuth();
 
   // Load data when user changes
@@ -30,9 +31,107 @@ export const useStorage = () => {
       // Clear data when user logs out
       setRecords([]);
       setSettings(DEFAULT_SETTINGS);
+      setLastUpdatedAt(null);
       setLoading(false);
     }
   }, [user]);
+
+  // Set up real-time subscription for settings changes
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('🔄 Setting up real-time subscription for user settings');
+
+    const subscription = supabase
+      .channel('user_settings_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_settings',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('🔄 Real-time settings change detected:', payload);
+          
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            const newData = payload.new;
+            const newUpdatedAt = newData.updated_at;
+            
+            // Only update if this change is newer than what we have locally
+            if (!lastUpdatedAt || newUpdatedAt > lastUpdatedAt) {
+              console.log('✅ Applying real-time settings update (newer than local)');
+              console.log('🕒 Local updated_at:', lastUpdatedAt);
+              console.log('🕒 Remote updated_at:', newUpdatedAt);
+              
+              // Parse the settings from the real-time update
+              const parsedSettings = parseSettingsFromDatabase(newData);
+              setSettings(parsedSettings);
+              setLastUpdatedAt(newUpdatedAt);
+            } else {
+              console.log('⏭️ Ignoring real-time update (older than local)');
+              console.log('🕒 Local updated_at:', lastUpdatedAt);
+              console.log('🕒 Remote updated_at:', newUpdatedAt);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('🔄 Cleaning up real-time subscription');
+      subscription.unsubscribe();
+    };
+  }, [user, lastUpdatedAt]);
+
+  const parseSettingsFromDatabase = (settingsData: any): Settings => {
+    console.log('📊 Parsing settings from database:', settingsData);
+    
+    // Parse field service days from database format
+    let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+    
+    // Try to use the new field_service_days_config column first
+    if (settingsData.field_service_days_config && Array.isArray(settingsData.field_service_days_config)) {
+      try {
+        fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
+          day: fsd.day,
+          type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type, // Convert old format
+          potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
+          label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+        }));
+        console.log('✅ Successfully parsed field_service_days_config:', fieldServiceDays);
+      } catch (e) {
+        console.warn('⚠️ Failed to parse field_service_days_config:', e);
+        console.warn('Raw field_service_days_config data:', settingsData.field_service_days_config);
+        fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+      }
+    }
+    // Fallback to legacy field_service_days if config is not available
+    else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
+      console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
+      // Convert legacy format to new format
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
+        day,
+        type: index % 2 === 0 ? 'h2h' : 'cart',
+        potentialHours: index % 2 === 0 ? 4 : 2,
+        label: `${dayNames[day]} - ${index % 2 === 0 ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+      }));
+      console.log('✅ Converted legacy field service days:', fieldServiceDays);
+    } else {
+      console.log('⚠️ No field service days found in database, using defaults');
+    }
+
+    return {
+      monthlyTarget: settingsData.monthly_target,
+      yearlyTarget: settingsData.yearly_target,
+      fieldServiceDays,
+      serviceYearStart: settingsData.service_year_start,
+      username: '', // We'll get this from profile
+      password: '' // Not stored in database
+    };
+  };
 
   const loadData = async () => {
     if (!user) return;
@@ -80,53 +179,14 @@ export const useStorage = () => {
       if (settingsData) {
         console.log('📊 Raw settings data from database:', settingsData);
         
-        // Parse field service days from database format
-        let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
+        const loadedSettings = parseSettingsFromDatabase(settingsData);
         
-        // Try to use the new field_service_days_config column first
-        if (settingsData.field_service_days_config && Array.isArray(settingsData.field_service_days_config)) {
-          try {
-            fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
-              day: fsd.day,
-              type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type, // Convert old format
-              potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
-              label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
-            }));
-            console.log('✅ Successfully parsed field_service_days_config:', fieldServiceDays);
-          } catch (e) {
-            console.warn('⚠️ Failed to parse field_service_days_config:', e);
-            console.warn('Raw field_service_days_config data:', settingsData.field_service_days_config);
-            fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
-          }
-        }
-        // Fallback to legacy field_service_days if config is not available
-        else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
-          console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
-          // Convert legacy format to new format
-          const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-          fieldServiceDays = settingsData.field_service_days.map((day: number, index: number) => ({
-            day,
-            type: index % 2 === 0 ? 'h2h' : 'cart',
-            potentialHours: index % 2 === 0 ? 4 : 2,
-            label: `${dayNames[day]} - ${index % 2 === 0 ? 'House to House/Return Visits' : 'Cart Witnessing'}`
-          }));
-          console.log('✅ Converted legacy field service days:', fieldServiceDays);
-        } else {
-          console.log('⚠️ No field service days found in database, using defaults');
-        }
-
-        const loadedSettings = {
-          monthlyTarget: settingsData.monthly_target,
-          yearlyTarget: settingsData.yearly_target,
-          fieldServiceDays,
-          serviceYearStart: settingsData.service_year_start,
-          username: '', // We'll get this from profile
-          password: '' // Not stored in database
-        };
-
         console.log('✅ Final loaded settings:', loadedSettings);
         console.log('🎯 Field service days loaded:', loadedSettings.fieldServiceDays);
+        console.log('🕒 Settings updated_at:', settingsData.updated_at);
+        
         setSettings(loadedSettings);
+        setLastUpdatedAt(settingsData.updated_at);
       } else {
         console.log('📝 No settings found, creating default settings');
         // Create default settings for new user
@@ -147,7 +207,7 @@ export const useStorage = () => {
       console.log('📝 Creating default settings for user:', user.id);
       console.log('📝 Default field service days:', DEFAULT_SETTINGS.fieldServiceDays);
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('user_settings')
         .insert({
           user_id: user.id,
@@ -156,12 +216,15 @@ export const useStorage = () => {
           field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
           field_service_days_config: DEFAULT_SETTINGS.fieldServiceDays, // New format
           service_year_start: DEFAULT_SETTINGS.serviceYearStart
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
       
       console.log('✅ Default settings created successfully');
       setSettings(DEFAULT_SETTINGS);
+      setLastUpdatedAt(data.updated_at);
     } catch (err: any) {
       console.error('❌ Error creating default settings:', err);
     }
@@ -333,6 +396,7 @@ export const useStorage = () => {
       console.log('💾 New settings partial:', newSettings);
       console.log('💾 Updated settings (merged):', updatedSettings);
       console.log('🎯 Field service days to save:', updatedSettings.fieldServiceDays);
+      console.log('🕒 Current lastUpdatedAt:', lastUpdatedAt);
 
       // Prepare the update data - ensure field service days are properly formatted
       const updateData: any = {
@@ -348,14 +412,44 @@ export const useStorage = () => {
       console.log('💾 field_service_days (legacy):', updateData.field_service_days);
       console.log('💾 field_service_days_config (new):', updateData.field_service_days_config);
 
-      // Use upsert to handle both insert and update cases
-      const { data, error } = await supabase
+      // Use optimistic locking with updated_at to prevent race conditions
+      let query = supabase
         .from('user_settings')
         .upsert(updateData, {
           onConflict: 'user_id'
         })
         .select()
         .single();
+
+      // If we have a lastUpdatedAt, add it as a condition to prevent overwriting newer changes
+      if (lastUpdatedAt) {
+        console.log('🔒 Using optimistic locking with updated_at:', lastUpdatedAt);
+        // First, check if the current version in DB is still the same
+        const { data: currentData, error: checkError } = await supabase
+          .from('user_settings')
+          .select('updated_at')
+          .eq('user_id', user.id)
+          .single();
+
+        if (checkError && checkError.code !== 'PGRST116') {
+          throw checkError;
+        }
+
+        if (currentData && currentData.updated_at > lastUpdatedAt) {
+          console.log('⚠️ Settings have been updated by another device!');
+          console.log('🕒 Local updated_at:', lastUpdatedAt);
+          console.log('🕒 Remote updated_at:', currentData.updated_at);
+          
+          // Reload the latest settings and merge with our changes
+          console.log('🔄 Reloading latest settings to merge changes...');
+          await loadData();
+          
+          // Show a warning to the user
+          throw new Error('Settings were updated on another device. Your changes have been merged with the latest version.');
+        }
+      }
+
+      const { data, error } = await query;
 
       if (error) {
         console.error('❌ Database error during settings update:', error);
@@ -379,12 +473,15 @@ export const useStorage = () => {
         console.log('🔍 field_service_days (legacy):', data.field_service_days);
         console.log('🔍 field_service_days_config (new):', data.field_service_days_config);
         console.log('🔍 service_year_start:', data.service_year_start);
+        console.log('🔍 updated_at:', data.updated_at);
       }
 
       // Update local state only after successful database update
       setSettings(updatedSettings);
+      setLastUpdatedAt(data.updated_at);
       console.log('✅ Local settings updated successfully');
       console.log('✅ New local field service days:', updatedSettings.fieldServiceDays);
+      console.log('✅ New lastUpdatedAt:', data.updated_at);
 
       // Immediately verify by reading back from database
       console.log('🔍 Performing immediate verification read...');
