@@ -53,7 +53,7 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
   }
 
   const getErrorMessage = (error: AuthError): string => {
-    console.log('Auth error details:', error)
+    console.log('Processing auth error:', error)
     
     // Handle specific Supabase auth error codes and messages
     const message = error.message?.toLowerCase() || ''
@@ -142,22 +142,22 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
     setLoading(true)
     setErrors({})
 
-    try {
-      const { error } = await onSignUp(email, password)
-      
-      if (error) {
-        // This is a Supabase auth error, not an exception
-        setErrors({ general: getErrorMessage(error) })
-      } else {
-        setSuccess(true)
-      }
-    } catch (err) {
-      // This catches actual exceptions (network failures, etc.)
-      console.error('Unexpected error during sign up:', err)
-      setErrors({ general: 'An unexpected error occurred. Please try again.' })
-    } finally {
-      setLoading(false)
+    console.log('Starting sign up process...')
+
+    const { error } = await onSignUp(email, password)
+    
+    console.log('Sign up completed, error:', error)
+    
+    if (error) {
+      // This is a Supabase auth error, not an exception
+      const errorMessage = getErrorMessage(error)
+      console.log('Setting error message:', errorMessage)
+      setErrors({ general: errorMessage })
+    } else {
+      setSuccess(true)
     }
+    
+    setLoading(false)
   }
 
   if (success) {

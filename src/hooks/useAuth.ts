@@ -52,67 +52,51 @@ export function useAuth() {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
+    console.log('Attempting sign in for:', email)
+    
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-      if (error) {
-        throw error
-      }
+    console.log('Sign in result:', { data, error })
 
-      return data
-    } catch (error) {
-      console.error('Sign in error:', error)
-      throw error
-    }
+    // Return the result object - don't throw errors
+    return { data, error }
   }
 
   const signUp = async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      })
+    console.log('Attempting sign up for:', email)
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    })
 
-      if (error) {
-        throw error
-      }
+    console.log('Sign up result:', { data, error })
 
-      return data
-    } catch (error) {
-      console.error('Sign up error:', error)
-      throw error
-    }
+    // Return the result object - don't throw errors
+    return { data, error }
   }
 
   const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut()
-      
-      if (error) {
-        throw error
-      }
-    } catch (error) {
-      console.error('Sign out error:', error)
-      throw error
-    }
+    const { error } = await supabase.auth.signOut()
+    
+    // Return the result object - don't throw errors
+    return { error }
   }
 
   const resetPassword = async (email: string) => {
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
-      })
+    console.log('Attempting password reset for:', email)
+    
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
 
-      if (error) {
-        throw error
-      }
-    } catch (error) {
-      console.error('Reset password error:', error)
-      throw error
-    }
+    console.log('Password reset result:', { error })
+
+    // Return the result object - don't throw errors
+    return { error }
   }
 
   return {

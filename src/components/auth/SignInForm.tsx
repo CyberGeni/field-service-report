@@ -43,7 +43,7 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
   }
 
   const getErrorMessage = (error: AuthError): string => {
-    console.log('Auth error details:', error)
+    console.log('Processing auth error:', error)
     
     // Handle specific Supabase auth error codes and messages
     const message = error.message?.toLowerCase() || ''
@@ -116,21 +116,21 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
     setLoading(true)
     setErrors({})
 
-    try {
-      const { error } = await onSignIn(email, password)
-      
-      if (error) {
-        // This is a Supabase auth error, not an exception
-        setErrors({ general: getErrorMessage(error) })
-      }
-      // If successful (no error), the parent component will handle navigation
-    } catch (err) {
-      // This catches actual exceptions (network failures, etc.)
-      console.error('Unexpected error during sign in:', err)
-      setErrors({ general: 'An unexpected error occurred. Please try again.' })
-    } finally {
-      setLoading(false)
+    console.log('Starting sign in process...')
+
+    const { error } = await onSignIn(email, password)
+    
+    console.log('Sign in completed, error:', error)
+    
+    if (error) {
+      // This is a Supabase auth error, not an exception
+      const errorMessage = getErrorMessage(error)
+      console.log('Setting error message:', errorMessage)
+      setErrors({ general: errorMessage })
     }
+    // If successful (no error), the parent component will handle navigation
+    
+    setLoading(false)
   }
 
   return (
