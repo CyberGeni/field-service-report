@@ -517,32 +517,32 @@ const StudentDetailsScreen: React.FC<StudentDetailsScreenProps> = ({
       {/* Header */}
       <div className="bg-white rounded-xl p-6">
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 flex-1">
             <button
               onClick={onBack}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <ArrowLeft size={20} className="text-gray-500" />
             </button>
-            <div className="flex items-center space-x-3">
-              <h1 className="text-2xl font-bold text-gray-800">{student.name}</h1>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => onEditStudent(student)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Edit student"
-                >
-                  <Edit size={18} />
-                </button>
-                <button
-                  onClick={() => onDeleteStudent(student)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Delete student"
-                >
-                  <Trash2 size={18} />
-                </button>
-              </div>
-            </div>
+            <h1 className="text-2xl font-bold text-gray-800 flex-1">{student.name}</h1>
+          </div>
+          
+          {/* Action buttons aligned to far right */}
+          <div className="flex space-x-2">
+            <button
+              onClick={() => onEditStudent(student)}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Edit student"
+            >
+              <Edit size={18} />
+            </button>
+            <button
+              onClick={() => onDeleteStudent(student)}
+              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Delete student"
+            >
+              <Trash2 size={18} />
+            </button>
           </div>
         </div>
         
