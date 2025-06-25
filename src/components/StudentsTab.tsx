@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Users, Search, Plus, Edit, Trash2, X, Calendar, MapPin, BookOpen, Clock, User, ArrowLeft, Eye } from 'lucide-react';
 import { Student, StudentVisit } from '../types';
 import { useStudents } from '../hooks/useStudents';
+import { useAuth } from '../hooks/useAuth';
 import { useToast } from './ui/toast';
 
 interface StudentModalProps {
@@ -460,15 +461,21 @@ const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
   const [visits, setVisits] = useState<StudentVisit[]>([]);
   const [loadingVisits, setLoadingVisits] = useState(false);
   const { loadStudentVisits } = useStudents();
+  const { user } = useAuth();
 
   // Load visits when modal opens
   React.useEffect(() => {
-    if (isOpen && student) {
+    if (isOpen && student && user) {
       loadVisits();
     }
-  }, [isOpen, student]);
+  }, [isOpen, student, user]);
 
   const loadVisits = async () => {
+    if (!user) {
+      console.error('User not authenticated');
+      return;
+    }
+
     setLoadingVisits(true);
     try {
       const visitsData = await loadStudentVisits(student.id);
@@ -622,7 +629,12 @@ const StudentDetailsModal: React.FC<StudentDetailsModalProps> = ({
           <div>
             <h4 className="text-lg font-semibold text-gray-800 mb-4">Visit History</h4>
             
-            {loadingVisits ? (
+            {!user ? (
+              <div className="text-center py-8 text-gray-500">
+                <p className="font-medium">Authentication required</p>
+                <p className="text-sm">Please sign in to view visit history</p>
+              </div>
+            ) : loadingVisits ? (
               <div className="text-center py-8">
                 <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                 <p className="text-gray-600">Loading visits...</p>
