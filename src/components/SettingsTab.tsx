@@ -683,7 +683,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         <div className="bg-green-50 border border-green-200 rounded-xl p-4">
           <p className="text-green-800 text-sm">
             <strong>Multi-device sync:</strong> Your settings are automatically synchronized across all your devices. 
-            If you notice any inconsistencies, use the "Sync Now" button to force a refresh.
+            If you notice any inconsistencies, use the "Sync Now\" button to force a refresh.
           </p>
         </div>
       </div>
