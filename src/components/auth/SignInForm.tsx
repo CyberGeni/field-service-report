@@ -120,11 +120,13 @@ const SignInForm: React.FC<SignInFormProps> = ({ onBack, onSignIn, onForgotPassw
       const { error } = await onSignIn(email, password)
       
       if (error) {
+        // This is a Supabase auth error, not an exception
         setErrors({ general: getErrorMessage(error) })
       }
-      // If successful, the parent component will handle navigation
+      // If successful (no error), the parent component will handle navigation
     } catch (err) {
-      // Handle any unexpected errors that might occur
+      // This catches actual exceptions (network failures, etc.)
+      console.error('Unexpected error during sign in:', err)
       setErrors({ general: 'An unexpected error occurred. Please try again.' })
     } finally {
       setLoading(false)

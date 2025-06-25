@@ -15,7 +15,7 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
 
   const getErrorMessage = (error: AuthError): string => {
     // Handle specific Supabase auth error codes and messages
-    const message = error.message.toLowerCase()
+    const message = error.message?.toLowerCase() || ''
     
     if (message.includes('user not found') || 
         message.includes('email not found') ||
@@ -67,15 +67,22 @@ const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onBack, onReset
     setLoading(true)
     setError('')
 
-    const { error } = await onResetPassword(email)
-    
-    if (error) {
-      setError(getErrorMessage(error))
-    } else {
-      setSuccess(true)
+    try {
+      const { error } = await onResetPassword(email)
+      
+      if (error) {
+        // This is a Supabase auth error, not an exception
+        setError(getErrorMessage(error))
+      } else {
+        setSuccess(true)
+      }
+    } catch (err) {
+      // This catches actual exceptions (network failures, etc.)
+      console.error('Unexpected error during password reset:', err)
+      setError('An unexpected error occurred. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    
-    setLoading(false)
   }
 
   if (success) {

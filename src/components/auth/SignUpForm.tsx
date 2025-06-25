@@ -146,13 +146,14 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
       const { error } = await onSignUp(email, password)
       
       if (error) {
+        // This is a Supabase auth error, not an exception
         setErrors({ general: getErrorMessage(error) })
       } else {
         setSuccess(true)
       }
     } catch (err) {
-      console.log("error:", err)
-      // Handle any unexpected errors that might occur
+      // This catches actual exceptions (network failures, etc.)
+      console.error('Unexpected error during sign up:', err)
       setErrors({ general: 'An unexpected error occurred. Please try again.' })
     } finally {
       setLoading(false)
