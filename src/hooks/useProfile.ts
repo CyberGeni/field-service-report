@@ -142,7 +142,7 @@ export function useProfile(user: any) {
 
       console.log('Uploading to storage path:', fileName)
 
-      // First, try to delete any existing avatar for this user to clean up storage
+      // Clean up existing avatar files for this user
       try {
         const { data: existingFiles } = await supabase.storage
           .from('avatars')
@@ -158,7 +158,6 @@ export function useProfile(user: any) {
         }
       } catch (cleanupError) {
         console.warn('Could not clean up existing avatars (this is okay):', cleanupError)
-        // Continue with upload even if cleanup fails
       }
 
       // Upload the new file
@@ -177,30 +176,27 @@ export function useProfile(user: any) {
 
       console.log('File uploaded successfully to storage:', uploadData)
 
-      // Get the public URL with cache busting
+      // Get the public URL
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
         .getPublicUrl(fileName)
 
-      // Add cache busting parameter to ensure fresh image loads
-      const cacheBustedUrl = `${publicUrl}?t=${timestamp}`
-      console.log('Generated public URL with cache busting:', cacheBustedUrl)
+      console.log('Generated public URL:', publicUrl)
 
-      // Verify the URL is accessible by making a HEAD request
+      // Test the URL accessibility
       try {
         const response = await fetch(publicUrl, { method: 'HEAD' })
         if (!response.ok) {
           console.warn('Avatar URL verification failed:', response.status, response.statusText)
-          // Don't throw here, the URL might still work for display
         } else {
           console.log('Avatar URL verified as accessible')
         }
       } catch (fetchError) {
-        console.warn('Could not verify avatar URL accessibility (this is okay):', fetchError)
-        // Don't throw here, the URL might still work for display
+        console.warn('Could not verify avatar URL accessibility:', fetchError)
       }
 
-      return { data: cacheBustedUrl, error: null }
+      // Return the clean URL without cache busting for storage
+      return { data: publicUrl, error: null }
     } catch (err: any) {
       console.error('Avatar upload error:', err)
       return { data: null, error: err }

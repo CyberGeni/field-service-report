@@ -17,7 +17,6 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
   const [name, setName] = useState('')
   const [serviceType, setServiceType] = useState<'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'>('publisher')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
   const [error, setError] = useState('')
@@ -39,17 +38,11 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
       return
     }
 
-    setAvatarFile(file)
     setError('')
     setUploadSuccess(false)
     setImageError(false)
-    
-    // Create preview URL
-    const previewUrl = URL.createObjectURL(file)
-    setAvatarUrl(previewUrl)
-
-    // Upload immediately for better UX
     setUploading(true)
+    
     try {
       console.log('Uploading avatar during profile setup...')
       const { data: uploadedUrl, error: uploadError } = await onUploadAvatar(file)
@@ -57,11 +50,11 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
       if (uploadError) {
         console.error('Avatar upload failed:', uploadError)
         setError('Failed to upload avatar: ' + uploadError.message)
-        // Keep the preview URL so user can still see their selection
+        // Create a preview URL so user can still see their selection
+        const previewUrl = URL.createObjectURL(file)
+        setAvatarUrl(previewUrl)
       } else if (uploadedUrl) {
         console.log('Avatar uploaded successfully:', uploadedUrl)
-        // Clean up the preview URL
-        URL.revokeObjectURL(previewUrl)
         setAvatarUrl(uploadedUrl)
         setUploadSuccess(true)
         setError('')
@@ -69,6 +62,9 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
     } catch (err: any) {
       console.error('Avatar upload error:', err)
       setError('Failed to upload avatar')
+      // Create a preview URL so user can still see their selection
+      const previewUrl = URL.createObjectURL(file)
+      setAvatarUrl(previewUrl)
     } finally {
       setUploading(false)
     }
@@ -95,7 +91,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
     setError('')
     
     try {
-      // If we have an uploaded avatar URL, use it; otherwise use null
+      // Only use the avatar URL if upload was successful
       const finalAvatarUrl = uploadSuccess && avatarUrl ? avatarUrl : undefined
 
       await onComplete({
