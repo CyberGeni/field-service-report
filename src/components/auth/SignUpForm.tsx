@@ -151,6 +151,7 @@ const SignUpForm: React.FC<SignUpFormProps> = ({ onBack, onSignUp }) => {
         setSuccess(true)
       }
     } catch (err) {
+      console.log("error:", err)
       // Handle any unexpected errors that might occur
       setErrors({ general: 'An unexpected error occurred. Please try again.' })
     } finally {
