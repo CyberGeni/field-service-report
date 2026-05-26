@@ -378,7 +378,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <h3 className="text-lg font-semibold text-gray-800">Edit Profile</h3>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={saving || uploading}
+              className="p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               <X size={20} className="text-gray-500" />
             </button>
@@ -540,6 +541,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFieldServiceModal, setShowFieldServiceModal] = useState(false);
   const [editingFieldServiceDay, setEditingFieldServiceDay] = useState<FieldServiceDay | null>(null);
+  const [deletingDay, setDeletingDay] = useState<FieldServiceDay | null>(null);
   const [imageError, setImageError] = useState(false);
   const [imageKey, setImageKey] = useState(0); // Force re-render of image
   const { addToast } = useToast();
@@ -588,12 +590,13 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   const handleDeleteFieldServiceDay = async (dayToDelete: FieldServiceDay) => {
+    setDeletingDay(dayToDelete);
     try {
       const updatedDays = localSettings.fieldServiceDays.filter(day => day !== dayToDelete);
       const updatedSettings = { ...localSettings, fieldServiceDays: updatedDays };
       setLocalSettings(updatedSettings);
       await onUpdateSettings(updatedSettings);
-      
+
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       addToast({
         type: 'success',
@@ -607,6 +610,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         title: 'Delete Failed',
         description: 'Failed to remove field service day'
       });
+    } finally {
+      setDeletingDay(null);
     }
   };
 
@@ -854,17 +859,23 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                 <div className="flex items-center">
                   <button
                     onClick={() => handleEditFieldServiceDay(fieldDay)}
-                    className="p-1 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    disabled={deletingDay !== null}
+                    className="p-1 text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
                     title="Edit day"
                   >
                     <Edit size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteFieldServiceDay(fieldDay)}
-                    className="p-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    disabled={deletingDay !== null}
+                    className="p-1 text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors flex items-center justify-center w-7 h-7"
                     title="Delete day"
                   >
-                    <Trash2 size={16} />
+                    {deletingDay === fieldDay ? (
+                      <div className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
                   </button>
                 </div>
               </div>

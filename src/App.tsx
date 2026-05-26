@@ -146,7 +146,7 @@ function App() {
       case 'home':
         return <HomeTab records={records} settings={settings} profile={profile} />;
       case 'calendar':
-        return <CalendarTab records={records} settings={settings} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
+        return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
       case 'students':
         return <StudentsTab />;
       case 'settings':

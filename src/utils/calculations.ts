@@ -50,13 +50,21 @@ export const calculateMonthlyStats = (
   };
 };
 
+const getDefaultServiceYearStart = (): string => {
+  const now = new Date();
+  const month = now.getMonth(); // 0-indexed: 8 = September
+  const year = now.getFullYear();
+  return `${month >= 8 ? year : year - 1}-09`;
+};
+
 export const calculateYearlyStats = (
   records: ServiceRecord[],
   settings: Settings,
   profile?: Profile | null
 ): YearlyStats => {
   const currentDate = new Date();
-  const serviceYearStart = new Date(settings.serviceYearStart + '-01');
+  const serviceYearStartStr = settings.serviceYearStart || getDefaultServiceYearStart();
+  const serviceYearStart = new Date(serviceYearStartStr + '-01');
   const serviceYearEnd = new Date(serviceYearStart.getFullYear() + 1, serviceYearStart.getMonth(), 0);
   
   const yearRecords = records.filter(record => {
@@ -109,10 +117,10 @@ export const generateFieldServiceSuggestions = (
   const currentDate = new Date();
   const currentHour = currentDate.getHours();
   const [year, monthNum] = month.split('-').map(Number);
-  
+
   // Only suggest dates from today onwards within the current month
   const isCurrentMonth = currentDate.getFullYear() === year && (currentDate.getMonth() + 1) === monthNum;
-  
+
   // If this is the current month, determine start day based on time
   let startDay: number;
   if (isCurrentMonth) {
@@ -125,17 +133,18 @@ export const generateFieldServiceSuggestions = (
   } else {
     startDay = 1; // Start from the 1st for other months
   }
-  
+
   const monthEnd = new Date(year, monthNum, 0);
   const daysInMonth = monthEnd.getDate();
-  
+
   const suggestions: FieldServiceSuggestion[] = [];
   const recordedDates = new Set(records.filter(r => r.date.startsWith(month)).map(r => r.date));
-  
+
   // Generate suggestions for remaining days in the month (starting from appropriate day)
   for (let day = startDay; day <= daysInMonth; day++) {
     const date = new Date(year, monthNum - 1, day);
-    const dateString = date.toISOString().split('T')[0];
+    // Build date string directly from parts to avoid UTC timezone shifting
+    const dateString = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     // Skip if already recorded
     if (recordedDates.has(dateString)) {
@@ -169,14 +178,8 @@ export const generateFieldServiceSuggestions = (
     suggestions.push(suggestion);
   }
   
-  // Sort by priority and potential hours
-  return suggestions.sort((a, b) => {
-    const priorityOrder = { high: 3, medium: 2, low: 1 };
-    if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
-      return priorityOrder[b.priority] - priorityOrder[a.priority];
-    }
-    return b.potentialHours - a.potentialHours;
-  }).slice(0, 10); // Limit to top 10 suggestions
+  // Sort chronologically
+  return suggestions.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10);
 };
 
 export const getProgressPercentage = (current: number, target: number): number => {

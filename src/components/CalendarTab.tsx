@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, Briefcase, BaggageClaim, User } from 'lucide-react';
-import { ServiceRecord, Settings } from '../types';
+import { ServiceRecord, Settings, Profile } from '../types';
+import { hasHourRequirement, getServiceTypeTargets } from '../utils/serviceTypes';
 import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getDateString } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
 import { useStudents } from '../hooks/useStudents';
@@ -8,8 +9,19 @@ import { useStudents } from '../hooks/useStudents';
 interface CalendarTabProps {
   records: ServiceRecord[];
   settings: Settings;
+  profile?: Profile | null;
   onSaveRecord: (record: ServiceRecord) => void;
   onDeleteRecord?: (id: string) => void;
+}
+
+interface StudentVisitEntry {
+  entryId: string;
+  studentId: string;
+  notes: string;
+  placeStopped: string;
+  isNew: boolean;
+  newName: string;
+  newAddress: string;
 }
 
 interface EntryModalProps {
@@ -33,152 +45,170 @@ const EntryModal: React.FC<EntryModalProps> = ({
   const [hours, setHours] = useState('');
   const [minutes, setMinutes] = useState('');
   const [notes, setNotes] = useState('');
-  const [selectedStudentId, setSelectedStudentId] = useState('');
-  const [showAddStudent, setShowAddStudent] = useState(false);
-  const [newStudentName, setNewStudentName] = useState('');
-  const [newStudentAddress, setNewStudentAddress] = useState('');
+  const [studentEntries, setStudentEntries] = useState<StudentVisitEntry[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [timeError, setTimeError] = useState(false);
   const { addToast } = useToast();
-  const { students, saveStudent } = useStudents();
+  const { students, saveStudent, saveStudentVisit } = useStudents();
 
+  // Load time/notes for a given service type — does NOT touch student entries
+  const loadFormForType = (type: 'h2h' | 'cart') => {
+    const existing = existingRecords.find(r => r.type === type);
+    setHours(existing ? existing.hours.toString() : '');
+    setMinutes(existing ? existing.minutes.toString() : '');
+    setNotes(existing?.notes || '');
+  };
+
+  // Initialise on modal open only
   React.useEffect(() => {
     if (isOpen) {
-      // Load existing record for the selected type
-      const existingRecord = existingRecords.find(r => r.type === selectedType);
-      
-      if (existingRecord) {
-        setHours(existingRecord.hours.toString());
-        setMinutes(existingRecord.minutes.toString());
-        setNotes(existingRecord.notes || '');
-        setSelectedStudentId(existingRecord.student_id || '');
-      } else {
-        setHours('');
-        setMinutes('');
-        setNotes('');
-        setSelectedStudentId('');
-      }
-      setShowAddStudent(false);
-      setNewStudentName('');
-      setNewStudentAddress('');
+      const hasH2H = existingRecords.some(r => r.type === 'h2h');
+      const hasCart = existingRecords.some(r => r.type === 'cart');
+      // Focus whichever type was already logged; if only Cart exists open on Cart,
+      // otherwise default to H2H (covers new entries and "both logged" cases).
+      const defaultType: 'h2h' | 'cart' = (hasCart && !hasH2H) ? 'cart' : 'h2h';
+      setSelectedType(defaultType);
+      loadFormForType(defaultType);
+      setStudentEntries([]);
+      setSaving(false);
+      setTimeError(false);
     }
-  }, [isOpen, existingRecords, selectedType]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
-  const handleAddNewStudent = async () => {
-    if (!newStudentName.trim() || !newStudentAddress.trim()) {
-      addToast({
-        type: 'error',
-        title: 'Missing Information',
-        description: 'Please enter both name and address for the new student'
-      });
-      return;
-    }
+  // ── Student entry helpers ──────────────────────────────────────────────────
 
-    try {
-      const newStudent = await saveStudent({
-        name: newStudentName.trim(),
-        address: newStudentAddress.trim(),
-        date_met: selectedDate,
-        publication_left: '',
-        place_stopped: '',
-        last_visit_date: '',
-        last_study_notes: ''
-      });
-
-      setSelectedStudentId(newStudent.id);
-      setShowAddStudent(false);
-      setNewStudentName('');
-      setNewStudentAddress('');
-      
-      addToast({
-        type: 'success',
-        title: 'Student Added',
-        description: `${newStudent.name} has been added to your students list`
-      });
-    } catch (error) {
-      // Error is handled by the hook
-    }
+  const addStudentEntry = () => {
+    setStudentEntries(prev => [...prev, {
+      entryId: crypto.randomUUID(),
+      studentId: '',
+      notes: '',
+      placeStopped: '',
+      isNew: false,
+      newName: '',
+      newAddress: ''
+    }]);
   };
+
+  const removeStudentEntry = (entryId: string) => {
+    setStudentEntries(prev => prev.filter(e => e.entryId !== entryId));
+  };
+
+  const updateStudentEntry = (entryId: string, updates: Partial<StudentVisitEntry>) => {
+    setStudentEntries(prev => prev.map(e => e.entryId === entryId ? { ...e, ...updates } : e));
+  };
+
+  // ── Save / Delete ──────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     const hoursNum = parseInt(hours) || 0;
     const minutesNum = parseInt(minutes) || 0;
     const existingRecord = existingRecords.find(r => r.type === selectedType);
+    const validEntries = studentEntries.filter(e => e.studentId || (e.isNew && e.newName.trim()));
 
-    try {
-      if (hoursNum === 0 && minutesNum === 0) {
-        // Delete record if it exists
-        if (existingRecord && onDelete) {
-          await onDelete(existingRecord.id);
-          addToast({
-            type: 'success',
-            title: 'Entry Deleted',
-            description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record deleted for ${new Date(selectedDate).toLocaleDateString()}`
-          });
-        } else {
-          addToast({
-            type: 'info',
-            title: 'No Changes',
-            description: 'No time was entered and no existing record to delete'
-          });
-        }
-      } else {
-        // Save/update record
-        const record: ServiceRecord = {
-          id: existingRecord?.id || crypto.randomUUID(),
-          date: selectedDate,
-          hours: hoursNum,
-          minutes: minutesNum,
-          type: selectedType,
-          notes: notes.trim() || undefined,
-          student_id: selectedStudentId || undefined
-        };
-        
-        await onSave(record);
-        addToast({
-          type: 'success',
-          title: existingRecord ? 'Entry Updated' : 'Entry Added',
-          description: `${hoursNum}h ${minutesNum}m logged for ${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} on ${new Date(selectedDate).toLocaleDateString()}`
-        });
-      }
-      
-      onClose();
-    } catch (error) {
+    // Only require time when ADDING a new entry — not when editing an existing one,
+    // because the user may intentionally clear time to delete the record while still
+    // recording student visits.
+    if (hoursNum === 0 && minutesNum === 0 && validEntries.length > 0 && !existingRecord) {
+      setTimeError(true);
       addToast({
         type: 'error',
-        title: 'Save Failed',
-        description: 'Failed to save service record'
+        title: 'Time Required',
+        description: 'Please enter the hours you spent before saving'
       });
+      return;
+    }
+    setTimeError(false);
+
+    setSaving(true);
+    try {
+      if (hoursNum === 0 && minutesNum === 0) {
+        if (existingRecord && onDelete) {
+          await onDelete(existingRecord.id);
+          addToast({ type: 'success', title: 'Entry Deleted', description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record removed` });
+        } else {
+          addToast({ type: 'info', title: 'No Changes', description: 'No time entered and no existing record to delete' });
+        }
+        onClose();
+        return;
+      }
+
+      // Save the service record
+      const record: ServiceRecord = {
+        id: existingRecord?.id || crypto.randomUUID(),
+        date: selectedDate,
+        hours: hoursNum,
+        minutes: minutesNum,
+        type: selectedType,
+        notes: notes.trim() || undefined,
+      };
+      await onSave(record);
+
+      // Save each student visit (silently — we show one summary toast below)
+      for (const entry of validEntries) {
+        try {
+          let studentId = entry.studentId;
+
+          if (entry.isNew && entry.newName.trim()) {
+            const created = await saveStudent({
+              name: entry.newName.trim(),
+              address: entry.newAddress.trim(),
+              date_met: selectedDate,
+              publication_left: '',
+              place_stopped: entry.placeStopped.trim(),
+              last_visit_date: selectedDate,
+              last_study_notes: entry.notes.trim()
+            });
+            studentId = created.id;
+            addToast({ type: 'success', title: 'Student Created', description: `${entry.newName.trim()} added to your students` });
+          }
+
+          if (!studentId) continue;
+
+          await saveStudentVisit({
+            student_id: studentId,
+            visit_date: selectedDate,
+            place_stopped: entry.placeStopped.trim() || undefined,
+            notes: entry.notes.trim() || undefined
+          }, { silent: true });
+        } catch (err) {
+          console.error('Failed to save student visit:', err);
+        }
+      }
+
+      const studentCount = validEntries.length;
+      addToast({
+        type: 'success',
+        title: existingRecord ? 'Entry Updated' : 'Entry Added',
+        description: `${hoursNum}h ${minutesNum}m logged${studentCount > 0 ? ` · ${studentCount} student visit${studentCount > 1 ? 's' : ''} recorded` : ''}`
+      });
+
+      onClose();
+    } catch (error) {
+      addToast({ type: 'error', title: 'Save Failed', description: 'Failed to save service record' });
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleDelete = async () => {
     const existingRecord = existingRecords.find(r => r.type === selectedType);
-    
-    if (existingRecord && onDelete) {
-      try {
-        await onDelete(existingRecord.id);
-        addToast({
-          type: 'success',
-          title: 'Entry Deleted',
-          description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record deleted for ${new Date(selectedDate).toLocaleDateString()}`
-        });
-        onClose();
-      } catch (error) {
-        addToast({
-          type: 'error',
-          title: 'Delete Failed',
-          description: 'Failed to delete service record'
-        });
-      }
+    if (!existingRecord || !onDelete) return;
+    setSaving(true);
+    try {
+      await onDelete(existingRecord.id);
+      addToast({ type: 'success', title: 'Entry Deleted', description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record removed` });
+      onClose();
+    } catch {
+      addToast({ type: 'error', title: 'Delete Failed', description: 'Failed to delete service record' });
+    } finally {
+      setSaving(false);
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    const [y, m, d] = dateString.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   const existingRecord = existingRecords.find(r => r.type === selectedType);
@@ -193,21 +223,16 @@ const EntryModal: React.FC<EntryModalProps> = ({
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-gray-800">
-                {hasExistingRecord ? 'Edit Entry' : 'Add Entry'}
-              </h3>
+              <h3 className="text-lg font-semibold text-gray-800">{hasExistingRecord ? 'Edit Entry' : 'Add Entry'}</h3>
               <p className="text-sm text-gray-600">{formatDate(selectedDate)}</p>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-            >
+            <button onClick={onClose} disabled={saving} className="p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors">
               <X size={20} className="text-gray-500" />
             </button>
           </div>
 
-          <div className="space-y-4">
-            {/* Service Type Tabs */}
+          <div className="space-y-5">
+            {/* Service Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
               <div className="grid grid-cols-2 gap-3">
@@ -217,19 +242,12 @@ const EntryModal: React.FC<EntryModalProps> = ({
                 ].map(({ id, label, subtitle, icon: Icon, color }) => (
                   <button
                     key={id}
-                    onClick={() => setSelectedType(id as 'h2h' | 'cart')}
-                    className={`p-4 rounded-xl transition-all duration-200 border-2 text-left ${
-                      selectedType === id
-                        ? `bg-${color}-50 text-${color}-700 border-${color}-200`
-                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
-                    }`}
+                    onClick={() => { const t = id as 'h2h' | 'cart'; setSelectedType(t); loadFormForType(t); }}
+                    disabled={saving}
+                    className={`p-4 rounded-xl transition-all duration-200 border-2 text-left disabled:opacity-60 disabled:cursor-not-allowed ${selectedType === id ? `bg-${color}-50 text-${color}-700 border-${color}-200` : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'}`}
                   >
                     <div className="flex flex-col items-center text-center space-y-2">
-                      <div className={`p-2 rounded-lg ${
-                        selectedType === id
-                          ? `bg-${color}-100`
-                          : 'bg-white'
-                      }`}>
+                      <div className={`p-2 rounded-lg ${selectedType === id ? `bg-${color}-100` : 'bg-white'}`}>
                         <Icon size={24} />
                       </div>
                       <div>
@@ -242,127 +260,163 @@ const EntryModal: React.FC<EntryModalProps> = ({
               </div>
             </div>
 
-            {/* Time Input */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Hours</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="24"
-                  value={hours}
-                  onChange={(e) => setHours(e.target.value)}
-                  className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-                  placeholder="0"
-                />
+            {/* Time */}
+            <div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${timeError ? 'text-red-600' : 'text-gray-700'}`}>
+                    Hours {timeError && <span className="text-red-500">*</span>}
+                  </label>
+                  <input type="number" min="0" max="24" value={hours}
+                    onChange={e => { setHours(e.target.value); if (timeError) setTimeError(false); }}
+                    disabled={saving}
+                    className={`w-full p-3 rounded-xl focus:ring-2 focus:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      timeError
+                        ? 'bg-red-50 border-2 border-red-400 focus:ring-red-400'
+                        : 'bg-gray-50 focus:ring-blue-500'
+                    }`} placeholder="0" />
+                </div>
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${timeError ? 'text-red-600' : 'text-gray-700'}`}>
+                    Minutes {timeError && <span className="text-red-500">*</span>}
+                  </label>
+                  <input type="number" min="0" max="59" value={minutes}
+                    onChange={e => { setMinutes(e.target.value); if (timeError) setTimeError(false); }}
+                    disabled={saving}
+                    className={`w-full p-3 rounded-xl focus:ring-2 focus:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      timeError
+                        ? 'bg-red-50 border-2 border-red-400 focus:ring-red-400'
+                        : 'bg-gray-50 focus:ring-blue-500'
+                    }`} placeholder="0" />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Minutes</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
-                  value={minutes}
-                  onChange={(e) => setMinutes(e.target.value)}
-                  className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-                  placeholder="0"
-                />
-              </div>
+              {timeError && (
+                <p className="mt-2 text-sm text-red-600 flex items-center space-x-1">
+                  <span>⚠️</span>
+                  <span>Enter the time you spent before saving</span>
+                </p>
+              )}
             </div>
 
-            {/* Student Selection */}
+            {/* General Notes */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Student Visited (optional)</label>
-              {!showAddStudent ? (
-                <div className="space-y-3">
-                  <select
-                    value={selectedStudentId}
-                    onChange={(e) => setSelectedStudentId(e.target.value)}
-                    className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select a student...</option>
-                    {students.map((student) => (
-                      <option key={student.id} value={student.id}>
-                        {student.name} - {student.address}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => setShowAddStudent(true)}
-                    className="w-full bg-green-50 hover:bg-green-100 text-green-700 py-2 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Plus size={16} />
-                    <span>Add New Student</span>
-                  </button>
-                </div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+                disabled={saving}
+                placeholder={`Notes about your ${selectedType === 'h2h' ? 'house to house' : 'cart witnessing'} service…`}
+                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-none disabled:opacity-60 disabled:cursor-not-allowed" />
+            </div>
+
+            {/* ── Students Visited ── */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <label className="block text-sm font-medium text-gray-700">Students Visited</label>
+                <button type="button" onClick={addStudentEntry} disabled={saving}
+                  className="text-sm text-blue-600 hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center space-x-1 font-medium">
+                  <Plus size={14} />
+                  <span>Add Student</span>
+                </button>
+              </div>
+
+              {studentEntries.length === 0 ? (
+                <button type="button" onClick={addStudentEntry} disabled={saving}
+                  className="w-full border-2 border-dashed border-gray-300 hover:border-blue-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl p-4 text-gray-400 hover:text-blue-600 transition-colors flex items-center justify-center space-x-2 text-sm">
+                  <User size={16} />
+                  <span>Tap to record a student visit</span>
+                </button>
               ) : (
-                <div className="space-y-3 p-4 bg-green-50 rounded-xl border border-green-200">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-green-800">Add New Student</h4>
-                    <button
-                      onClick={() => setShowAddStudent(false)}
-                      className="text-green-600 hover:text-green-800"
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                  <input
-                    type="text"
-                    value={newStudentName}
-                    onChange={(e) => setNewStudentName(e.target.value)}
-                    placeholder="Student's name"
-                    className="w-full p-3 bg-white rounded-xl border border-green-300 focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                  />
-                  <textarea
-                    value={newStudentAddress}
-                    onChange={(e) => setNewStudentAddress(e.target.value)}
-                    placeholder="Student's address"
-                    rows={2}
-                    className="w-full p-3 bg-white rounded-xl border border-green-300 focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
-                  />
-                  <button
-                    onClick={handleAddNewStudent}
-                    disabled={!newStudentName.trim() || !newStudentAddress.trim()}
-                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white py-2 px-4 rounded-xl font-medium transition-colors"
-                  >
-                    Add Student
+                <div className="space-y-3">
+                  {studentEntries.map((entry, idx) => (
+                    <div key={entry.entryId} className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                      {/* Entry header */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-blue-800">Student {idx + 1}</span>
+                        <button onClick={() => removeStudentEntry(entry.entryId)} disabled={saving}
+                          className="p-1 text-blue-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors">
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {/* Student picker */}
+                      {!entry.isNew ? (
+                        <div className="space-y-2">
+                          <select value={entry.studentId}
+                            onChange={e => updateStudentEntry(entry.entryId, { studentId: e.target.value })}
+                            disabled={saving}
+                            className="w-full p-3 bg-white rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+                            <option value="">Select a student…</option>
+                            {students.map(s => (
+                              <option key={s.id} value={s.id}>{s.name} — {s.address}</option>
+                            ))}
+                          </select>
+                          <button type="button"
+                            onClick={() => updateStudentEntry(entry.entryId, { isNew: true, studentId: '' })}
+                            disabled={saving}
+                            className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center space-x-1">
+                            <Plus size={12} />
+                            <span>Create new student instead</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <input type="text" value={entry.newName} placeholder="Student's name *"
+                            onChange={e => updateStudentEntry(entry.entryId, { newName: e.target.value })}
+                            disabled={saving}
+                            className="w-full p-3 bg-white rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm disabled:opacity-60 disabled:cursor-not-allowed" />
+                          <textarea value={entry.newAddress} placeholder="Student's address *" rows={2}
+                            onChange={e => updateStudentEntry(entry.entryId, { newAddress: e.target.value })}
+                            disabled={saving}
+                            className="w-full p-3 bg-white rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed" />
+                          <button type="button"
+                            onClick={() => updateStudentEntry(entry.entryId, { isNew: false, newName: '', newAddress: '' })}
+                            disabled={saving}
+                            className="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed flex items-center space-x-1">
+                            <span>← Select existing student instead</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Where we stopped */}
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 mb-1">Where we stopped</label>
+                        <input type="text" value={entry.placeStopped}
+                          onChange={e => updateStudentEntry(entry.entryId, { placeStopped: e.target.value })}
+                          disabled={saving}
+                          placeholder="e.g. Chapter 3, paragraph 12"
+                          className="w-full p-2.5 bg-white rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm disabled:opacity-60 disabled:cursor-not-allowed" />
+                      </div>
+
+                      {/* Visit notes */}
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 mb-1">Visit notes</label>
+                        <textarea value={entry.notes} rows={2}
+                          onChange={e => updateStudentEntry(entry.entryId, { notes: e.target.value })}
+                          disabled={saving}
+                          placeholder="How did the study go?"
+                          className="w-full p-2.5 bg-white rounded-xl border border-blue-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm resize-none disabled:opacity-60 disabled:cursor-not-allowed" />
+                      </div>
+                    </div>
+                  ))}
+
+                  <button type="button" onClick={addStudentEntry} disabled={saving}
+                    className="w-full border border-dashed border-blue-300 hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl p-3 text-blue-500 hover:text-blue-700 transition-colors text-sm flex items-center justify-center space-x-2">
+                    <Plus size={14} />
+                    <span>Add Another Student</span>
                   </button>
                 </div>
               )}
             </div>
 
-            {/* Notes */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={`Add notes about your ${selectedType === 'h2h' ? 'house to house' : 'cart witnessing'} service...`}
-                className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-none"
-                rows={3}
-              />
-            </div>
-
-            {/* Current Records Summary */}
+            {/* Existing records summary */}
             {existingRecords.length > 0 && (
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Current Records for This Date:</h4>
+                <h4 className="text-sm font-medium text-gray-700 mb-2">Already logged today:</h4>
                 <div className="space-y-1">
                   {existingRecords.map(record => (
                     <div key={record.id} className="flex items-center justify-between text-sm">
                       <span className="flex items-center space-x-2">
-                        {record.type === 'h2h' ? (
-                          <Briefcase size={14} className="text-blue-600" />
-                        ) : (
-                          <BaggageClaim size={14} className="text-purple-600" />
-                        )}
+                        {record.type === 'h2h' ? <Briefcase size={14} className="text-blue-600" /> : <BaggageClaim size={14} className="text-purple-600" />}
                         <span>{record.type === 'h2h' ? 'House to House' : 'Cart Witnessing'}</span>
-                        {record.student_id && (
-                          <span className="text-gray-500">
-                            • {students.find(s => s.id === record.student_id)?.name || 'Student'}
-                          </span>
-                        )}
                       </span>
                       <span className="font-medium">{record.hours}h {record.minutes}m</span>
                     </div>
@@ -374,30 +428,20 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
           {/* Actions */}
           <div className="flex space-x-3 mt-6">
-            {/* Delete button - only show if there's an existing record */}
             {hasExistingRecord && onDelete && (
-              <button
-                onClick={handleDelete}
-                className="bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center space-x-2"
-              >
+              <button onClick={handleDelete} disabled={saving}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center space-x-2">
                 <Trash2 size={16} />
                 <span>Delete</span>
               </button>
             )}
-            
-            <button
-              onClick={onClose}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors"
-            >
+            <button onClick={onClose} disabled={saving}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-800 py-3 px-4 rounded-xl font-medium transition-colors">
               Cancel
             </button>
-            
-            <button
-              onClick={handleSave}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2"
-            >
-              <Edit size={16} />
-              <span>{hasExistingRecord ? 'Update' : 'Save'}</span>
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 px-4 rounded-xl font-medium transition-colors flex items-center justify-center space-x-2">
+              {saving ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Edit size={16} /><span>{hasExistingRecord ? 'Update' : 'Save'}</span></>}
             </button>
           </div>
         </div>
@@ -406,7 +450,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
   );
 };
 
-const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveRecord, onDeleteRecord }) => {
+const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, onSaveRecord, onDeleteRecord }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
@@ -416,6 +460,122 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
   const daysInMonth = getDaysInMonth(year, month + 1);
   const firstDay = getFirstDayOfMonth(year, month + 1);
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  // ── Estimate helpers ────────────────────────────────────────────────────────
+
+  const getMonthlyTarget = () =>
+    profile?.service_type && hasHourRequirement(profile.service_type)
+      ? getServiceTypeTargets(profile.service_type).monthlyTarget
+      : settings.monthlyTarget;
+
+  const getYearlyTarget = () =>
+    profile?.service_type && hasHourRequirement(profile.service_type)
+      ? getServiceTypeTargets(profile.service_type).yearlyTarget
+      : settings.yearlyTarget;
+
+  /** Format hours as a compact string for calendar cells, rounded to 15-min slots. */
+  const formatEstimate = (hours: number): string => {
+    const totalMins = Math.round(hours * 60 / 15) * 15;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h === 0) return `${m}m`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}m`;
+  };
+
+  /**
+   * How many hours should the user aim for on this field-service day?
+   * Returns null if the day is past, already logged, not a field day, or target is met.
+   */
+  const calculateDayEstimate = (day: number): number | null => {
+    const today = new Date();
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const viewedDate = new Date(year, month, day);
+
+    if (viewedDate < todayMidnight) return null; // past
+    if (!isFieldServiceDay(viewedDate, settings.fieldServiceDays)) return null;
+
+    const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+    if (records.some(r => r.date === dateStr)) return null; // already logged
+
+    const todayYear = today.getFullYear();
+    const todayMonth = today.getMonth(); // 0-indexed
+    const monthlyTarget = getMonthlyTarget();
+    const monthPad = (month + 1).toString().padStart(2, '0');
+
+    if (year === todayYear && month === todayMonth) {
+      // ── Current month: spread remaining hours over remaining unlogged field days ──
+      const totalLoggedThisMonth = records
+        .filter(r => r.date.startsWith(`${year}-${monthPad}`))
+        .reduce((sum, r) => sum + r.hours + r.minutes / 60, 0);
+
+      const hoursNeeded = Math.max(0, monthlyTarget - totalLoggedThisMonth);
+      if (hoursNeeded === 0) return null;
+
+      const daysInThisMonth = new Date(year, month + 1, 0).getDate();
+      let unloggedFieldDays = 0;
+      for (let d = today.getDate(); d <= daysInThisMonth; d++) {
+        if (!isFieldServiceDay(new Date(year, month, d), settings.fieldServiceDays)) continue;
+        const ds = `${year}-${monthPad}-${d.toString().padStart(2, '0')}`;
+        if (!records.some(r => r.date === ds)) unloggedFieldDays++;
+      }
+      if (unloggedFieldDays === 0) return null;
+      return hoursNeeded / unloggedFieldDays;
+
+    } else {
+      // ── Future month: spread yearly-needed hours over remaining service-year months ──
+      const syStr = settings.serviceYearStart || (() => {
+        const m = today.getMonth();
+        const y = today.getFullYear();
+        return `${m >= 8 ? y : y - 1}-09`;
+      })();
+      const [syYear, syMonthNum] = syStr.split('-').map(Number);
+      const serviceYearStart = new Date(syYear, syMonthNum - 1, 1);
+      const serviceYearEndExcl = new Date(syYear + 1, syMonthNum - 1, 1); // exclusive
+
+      const viewedMonthStart = new Date(year, month, 1);
+      const yearlyTarget = getYearlyTarget();
+
+      let hoursPerMonth: number;
+
+      if (viewedMonthStart >= serviceYearStart && viewedMonthStart < serviceYearEndExcl) {
+        // Within the current service year — use yearly-adjusted monthly allocation
+        const serviceYearEndIncl = new Date(syYear + 1, syMonthNum - 1, 0);
+        const totalLoggedThisYear = records
+          .filter(r => {
+            const d = new Date(r.date);
+            return d >= serviceYearStart && d <= serviceYearEndIncl;
+          })
+          .reduce((sum, r) => sum + r.hours + r.minutes / 60, 0);
+
+        const yearlyHoursNeeded = Math.max(0, yearlyTarget - totalLoggedThisYear);
+        if (yearlyHoursNeeded === 0) return null;
+
+        // Count full months remaining from next month to service year end
+        const nextMonthStart = new Date(todayYear, todayMonth + 1, 1);
+        let monthsRemaining = 0;
+        const temp = new Date(nextMonthStart);
+        while (temp < serviceYearEndExcl) {
+          monthsRemaining++;
+          temp.setMonth(temp.getMonth() + 1);
+        }
+        if (monthsRemaining === 0) return null;
+        hoursPerMonth = yearlyHoursNeeded / monthsRemaining;
+      } else {
+        // Outside service year — fall back to flat monthly target
+        hoursPerMonth = monthlyTarget;
+      }
+
+      // Spread that monthly allocation across field days in the viewed month
+      const daysInViewedMonth = new Date(year, month + 1, 0).getDate();
+      let fieldDaysCount = 0;
+      for (let d = 1; d <= daysInViewedMonth; d++) {
+        if (isFieldServiceDay(new Date(year, month, d), settings.fieldServiceDays)) fieldDaysCount++;
+      }
+      if (fieldDaysCount === 0) return null;
+      return hoursPerMonth / fieldDaysCount;
+    }
+  };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
     setCurrentDate(prev => {
@@ -482,6 +642,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
     const hasRecords = dayRecords.length > 0;
     const isToday = new Date().toDateString() === date.toDateString();
     const isFuture = isFutureDate(day);
+    const estimate = calculateDayEstimate(day);
 
     return (
       <button
@@ -489,27 +650,36 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
         onClick={() => handleDayClick(day)}
         disabled={isFuture}
         className={`relative h-20 p-1 w-full text-left transition-colors flex flex-col ${
-          isFuture 
-            ? 'bg-gray-100 cursor-not-allowed opacity-50' 
-            : isToday 
-              ? 'bg-blue-50 hover:bg-blue-100' 
+          isFuture
+            ? 'bg-gray-100 cursor-not-allowed opacity-50'
+            : isToday
+              ? 'bg-blue-50 hover:bg-blue-100'
               : 'bg-white hover:bg-gray-100'
         }`}
       >
         {/* Date number at the top */}
         <div className={`text-sm font-medium mb-1 ${
           isFuture ? 'text-gray-400' :
-          isToday ? 'text-blue-600' : 
+          isToday ? 'text-blue-600' :
           isFieldDay ? 'text-gray-800' : 'text-gray-400'
         }`}>
           {day}
         </div>
-        
-        {/* Field service day indicator */}
-        {isFieldDay && !hasRecords && !isFuture && (
+
+        {/* Past unlogged field day — small grey dot */}
+        {isFieldDay && !hasRecords && !isFuture && estimate === null && (
           <div className="w-2 h-2 bg-gray-300 rounded-full mb-1" />
         )}
-        
+
+        {/* Upcoming/future field day — greyed-out hour estimate */}
+        {estimate !== null && (
+          <div className="flex-1 flex items-center justify-center">
+            <span className="text-xs text-gray-300 font-semibold leading-tight text-center">
+              ~{formatEstimate(estimate)}
+            </span>
+          </div>
+        )}
+
         {/* Service record entry */}
         {hasRecords && (
           <div className="flex-1 min-h-0">
@@ -522,7 +692,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, onSaveReco
             </div>
           </div>
         )}
-        
+
         {/* Add icon for clickable indication - only for non-future dates */}
         {!isFuture && (
           <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">

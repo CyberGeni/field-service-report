@@ -255,7 +255,7 @@ export const useStudents = () => {
     }
   };
 
-  const saveStudentVisit = async (visit: Omit<StudentVisit, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+  const saveStudentVisit = async (visit: Omit<StudentVisit, 'id' | 'user_id' | 'created_at' | 'updated_at'>, options: { silent?: boolean } = {}) => {
     if (!user) {
       throw new Error('User not authenticated');
     }
@@ -288,11 +288,13 @@ export const useStudents = () => {
         place_stopped: visit.place_stopped
       });
 
-      addToast({
-        type: 'success',
-        title: 'Visit Recorded',
-        description: 'Student visit has been recorded successfully'
-      });
+      if (!options.silent) {
+        addToast({
+          type: 'success',
+          title: 'Visit Recorded',
+          description: 'Student visit has been recorded successfully'
+        });
+      }
 
       return data;
 

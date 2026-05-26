@@ -2,7 +2,7 @@ import React from 'react';
 import { Clock, Target, TrendingUp, TrendingDown, User, Calendar, Briefcase, BaggageClaim } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
 import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor, generateFieldServiceSuggestions } from '../utils/calculations';
-import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort } from '../utils/dateUtils';
+import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort, isFieldServiceDay } from '../utils/dateUtils';
 import { getServiceTypeTargets, getServiceTypeLabel, hasHourRequirement } from '../utils/serviceTypes';
 import CircularProgress from './CircularProgress';
 
@@ -58,6 +58,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
   const todaysDate = getTodaysDate();
   const dailyTarget = getDailyTarget();
   const displayName = profile?.name || settings.username || 'Friend';
+  const todayIsFieldDay = isFieldServiceDay(new Date(), settings.fieldServiceDays);
 
   // Determine progress bar color based on progress
   const getProgressColor = (progress: number) => {
@@ -138,13 +139,14 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     }
   };
 
-  // Format suggestion date properly
+  // Format suggestion date properly — parse as local time to avoid UTC day-shift
   const formatSuggestionDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
+    const [y, m, d] = dateString.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('en-US', {
       weekday: 'long',
-      month: 'short', 
-      day: 'numeric' 
+      month: 'short',
+      day: 'numeric'
     });
   };
 
@@ -156,7 +158,9 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           Good {timeOfDay}, {displayName}!
         </h1>
         <p className="text-gray-600 text-lg tracking-tight">
-          Today is <span className="font-semibold">{todaysDate}</span> and you have a target of <span className="font-semibold">{dailyTarget}</span>
+          Today is <span className="font-semibold">{todaysDate}</span> and you have a target of{' '}
+          <span className="font-semibold">{dailyTarget}</span>{' '}
+          {todayIsFieldDay ? 'today' : 'the next time you go out for field service'}
         </p>
       </div>
 

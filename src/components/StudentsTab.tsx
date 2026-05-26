@@ -111,7 +111,8 @@ const StudentModal: React.FC<StudentModalProps> = ({
             </h3>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={saving}
+              className="p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               <X size={20} className="text-gray-500" />
             </button>
@@ -353,7 +354,8 @@ const VisitModal: React.FC<VisitModalProps> = ({
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              disabled={saving}
+              className="p-2 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               <X size={20} className="text-gray-500" />
             </button>
@@ -447,6 +449,7 @@ interface StudentDetailsScreenProps {
   onEditStudent: (student: Student) => void;
   onDeleteStudent: (student: Student) => void;
   onRecordVisit: (studentId: string, studentName: string) => void;
+  refreshKey?: number;
 }
 
 const StudentDetailsScreen: React.FC<StudentDetailsScreenProps> = ({
@@ -454,19 +457,20 @@ const StudentDetailsScreen: React.FC<StudentDetailsScreenProps> = ({
   onBack,
   onEditStudent,
   onDeleteStudent,
-  onRecordVisit
+  onRecordVisit,
+  refreshKey = 0
 }) => {
   const [visits, setVisits] = useState<StudentVisit[]>([]);
   const [loadingVisits, setLoadingVisits] = useState(false);
   const { loadStudentVisits } = useStudents();
   const { user } = useAuth();
 
-  // Load visits when component mounts
+  // Load visits on mount and whenever a new visit is saved (refreshKey changes)
   React.useEffect(() => {
     if (student && user) {
       loadVisits();
     }
-  }, [student, user]);
+  }, [student.id, user, refreshKey]);
 
   const loadVisits = async () => {
     if (!user) {
@@ -753,6 +757,15 @@ const StudentsTab: React.FC = () => {
   const [visitModalMode, setVisitModalMode] = useState<'add' | 'edit'>('add');
   const [visitStudentId, setVisitStudentId] = useState('');
   const [visitStudentName, setVisitStudentName] = useState('');
+  const [visitRefreshKey, setVisitRefreshKey] = useState(0);
+
+  // Keep selectedStudent in sync with the students array (e.g. after a visit updates last_visit_date)
+  React.useEffect(() => {
+    if (selectedStudent) {
+      const updated = students.find(s => s.id === selectedStudent.id);
+      if (updated) setSelectedStudent(updated);
+    }
+  }, [students]);
 
   // Filter students based on search query
   const filteredStudents = students.filter(student =>
@@ -794,6 +807,11 @@ const StudentsTab: React.FC = () => {
     setVisitStudentName(studentName);
     setVisitModalMode('add');
     setShowVisitModal(true);
+  };
+
+  const handleSaveVisit = async (visit: Omit<StudentVisit, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
+    await saveStudentVisit(visit);
+    setVisitRefreshKey(prev => prev + 1); // tell StudentDetailsScreen to reload its visits
   };
 
   const confirmDelete = async () => {
@@ -841,19 +859,6 @@ const StudentsTab: React.FC = () => {
     return `${Math.floor(diffDays / 30)} months ago`;
   };
 
-  // Show student details screen if a student is selected
-  if (showDetailsScreen && selectedStudent) {
-    return (
-      <StudentDetailsScreen
-        student={selectedStudent}
-        onBack={handleBackFromDetails}
-        onEditStudent={handleEditStudent}
-        onDeleteStudent={handleDeleteStudent}
-        onRecordVisit={handleRecordVisit}
-      />
-    );
-  }
-
   if (loading) {
     return (
       <div className="space-y-6">
@@ -867,6 +872,21 @@ const StudentsTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Student Details Screen */}
+      {showDetailsScreen && selectedStudent && (
+        <StudentDetailsScreen
+          student={selectedStudent}
+          onBack={handleBackFromDetails}
+          onEditStudent={handleEditStudent}
+          onDeleteStudent={handleDeleteStudent}
+          onRecordVisit={handleRecordVisit}
+          refreshKey={visitRefreshKey}
+        />
+      )}
+
+      {/* Students List (hidden while viewing details) */}
+      {!showDetailsScreen && <>
+
       {/* Header */}
       <div className="text-center py-4">
         <div className="flex items-center justify-center space-x-3 mb-2">
@@ -1036,7 +1056,9 @@ const StudentsTab: React.FC = () => {
         </div>
       )}
 
-      {/* Student Modal */}
+      </> /* end students list */}
+
+      {/* Modals — always rendered so they work from both list and details screen */}
       <StudentModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -1046,17 +1068,15 @@ const StudentsTab: React.FC = () => {
         mode={modalMode}
       />
 
-      {/* Visit Modal */}
       <VisitModal
         isOpen={showVisitModal}
         onClose={() => setShowVisitModal(false)}
-        onSave={saveStudentVisit}
+        onSave={handleSaveVisit}
         studentId={visitStudentId}
         studentName={visitStudentName}
         mode={visitModalMode}
       />
 
-      {/* Delete Confirmation Modal */}
       <DeleteConfirmModal
         isOpen={showDeleteModal}
         onClose={() => {

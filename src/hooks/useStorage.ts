@@ -4,6 +4,15 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
 
+// Dynamically calculate the current JW service year start (September of the appropriate year)
+const getDefaultServiceYearStart = (): string => {
+  const now = new Date();
+  const month = now.getMonth(); // 0-indexed: 8 = September
+  const year = now.getFullYear();
+  const serviceYearYear = month >= 8 ? year : year - 1;
+  return `${serviceYearYear}-09`;
+};
+
 const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
   yearlyTarget: 120,
@@ -13,7 +22,7 @@ const DEFAULT_SETTINGS: Settings = {
   ],
   username: '',
   password: '',
-  serviceYearStart: '2024-09'
+  serviceYearStart: getDefaultServiceYearStart()
 };
 
 export const useStorage = () => {
@@ -48,7 +57,17 @@ export const useStorage = () => {
           if (payload.new && payload.eventType !== 'DELETE') {
             const newSettings = parseSettingsFromDatabase(payload.new);
             console.log('🔄 Updating settings from real-time:', newSettings);
-            setSettings(newSettings);
+            // JSONB columns sometimes come back null in real-time payloads.
+            // If field_service_days_config is missing, preserve the current
+            // fieldServiceDays instead of reverting to defaults.
+            if (!payload.new.field_service_days_config) {
+              setSettings(prev => ({
+                ...newSettings,
+                fieldServiceDays: prev.fieldServiceDays
+              }));
+            } else {
+              setSettings(newSettings);
+            }
             settingsLoadedRef.current = true;
           }
         }
@@ -128,7 +147,7 @@ export const useStorage = () => {
       monthlyTarget: settingsData.monthly_target,
       yearlyTarget: settingsData.yearly_target,
       fieldServiceDays,
-      serviceYearStart: settingsData.service_year_start,
+      serviceYearStart: settingsData.service_year_start || getDefaultServiceYearStart(),
       username: '', // We'll get this from profile
       password: '' // Not stored in database
     };
