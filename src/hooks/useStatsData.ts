@@ -6,7 +6,8 @@ import {
   getMonthKey,
   getShortMonthLabel,
   listMonthKeys,
-  parseMonthKey
+  parseMonthKey,
+  SERVICE_YEAR_START_MONTH
 } from '../utils/dateUtils';
 
 export type StatsPeriod = 'lastQuarter' | 'calendarYear' | 'serviceYear' | 'allTime';
@@ -46,12 +47,12 @@ export interface StatsYearOption {
 
 /**
  * Which year a month belongs to for the given period: the calendar year, or - for a
- * service year - the year its September (or whichever start month is configured)
- * falls in, so January 2026 belongs to the 2025 service year.
+ * service year - the year its September falls in, so January 2026 belongs to the
+ * 2025 service year.
  */
-const getPeriodYear = (monthKey: string, period: StatsPeriod, startMonthNumber: number): number => {
+const getPeriodYear = (monthKey: string, period: StatsPeriod): number => {
   const { year, month } = parseMonthKey(monthKey);
-  if (period === 'serviceYear' && month < startMonthNumber) return year - 1;
+  if (period === 'serviceYear' && month < SERVICE_YEAR_START_MONTH) return year - 1;
   return year;
 };
 
@@ -60,7 +61,7 @@ interface PeriodRange {
   endMonth: string;
 }
 
-const getPeriodRange = (period: StatsPeriod, serviceYearStart: string, year: number): PeriodRange => {
+const getPeriodRange = (period: StatsPeriod, year: number): PeriodRange => {
   const currentMonth = getMonthKey(new Date());
   // A twelve-month window ends where it ends, but there is no point charting months
   // that haven't happened yet, so the current month caps every bounded period.
@@ -78,8 +79,7 @@ const getPeriodRange = (period: StatsPeriod, serviceYearStart: string, year: num
     case 'calendarYear':
       return twelveMonthsFrom(`${year}-01`);
     case 'serviceYear':
-      // Same start month as the configured service year, but in the chosen year.
-      return twelveMonthsFrom(`${year}-${serviceYearStart.slice(5, 7)}`);
+      return twelveMonthsFrom(`${year}-09`);
     case 'allTime':
     default:
       return { startMonth: null, endMonth: currentMonth };
@@ -93,19 +93,17 @@ const getPeriodRange = (period: StatsPeriod, serviceYearStart: string, year: num
 export const getStatsYearOptions = (
   records: ServiceRecord[],
   visits: VisitSummary[],
-  period: StatsPeriod,
-  serviceYearStart: string
+  period: StatsPeriod
 ): StatsYearOption[] => {
   if (!isYearScopedPeriod(period)) return [];
 
-  const startMonthNumber = parseMonthKey(serviceYearStart).month;
   const currentMonth = getMonthKey(new Date());
   const bounds = getDataMonthBounds(records, visits);
 
   // The year in progress is always offered, even before anything is logged in it.
-  const latest = getPeriodYear(currentMonth, period, startMonthNumber);
+  const latest = getPeriodYear(currentMonth, period);
   const earliest = bounds
-    ? Math.min(latest, getPeriodYear(bounds.first, period, startMonthNumber))
+    ? Math.min(latest, getPeriodYear(bounds.first, period))
     : latest;
 
   const options: StatsYearOption[] = [];
@@ -129,11 +127,10 @@ export const useStatsData = (
   records: ServiceRecord[],
   visits: VisitSummary[],
   period: StatsPeriod,
-  serviceYearStart: string,
   year: number
 ): MonthlyStatPoint[] => {
   return useMemo(() => {
-    const { startMonth, endMonth } = getPeriodRange(period, serviceYearStart, year);
+    const { startMonth, endMonth } = getPeriodRange(period, year);
     const dataBounds = getDataMonthBounds(records, visits);
 
     // With no lower bound, start at the first month that actually has data so the
@@ -153,5 +150,5 @@ export const useStatsData = (
       label: getShortMonthLabel(monthKey),
       ...totals[monthKey]
     }));
-  }, [records, visits, period, serviceYearStart, year]);
+  }, [records, visits, period, year]);
 };

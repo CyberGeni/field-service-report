@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { User, Upload, Camera, AlertCircle, CheckCircle } from 'lucide-react'
+import { User, Upload, Camera, AlertCircle, CheckCircle, HardHat } from 'lucide-react'
 import { Profile } from '../types'
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes'
 
@@ -8,6 +8,7 @@ interface ProfileSetupProps {
     name: string
     service_type: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'
     avatar_url?: string
+    is_volunteer: boolean
   }) => Promise<void>
   onUploadAvatar: (file: File) => Promise<{ data: string | null; error: any }>
   loading?: boolean
@@ -16,6 +17,7 @@ interface ProfileSetupProps {
 const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar, loading = false }) => {
   const [name, setName] = useState('')
   const [serviceType, setServiceType] = useState<'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'>('publisher')
+  const [isVolunteer, setIsVolunteer] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
@@ -97,7 +99,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
       await onComplete({
         name: name.trim(),
         service_type: serviceType,
-        avatar_url: finalAvatarUrl
+        avatar_url: finalAvatarUrl,
+        is_volunteer: isVolunteer
       })
     } catch (err: any) {
       setError(err.message || 'Failed to create profile')
@@ -240,6 +243,40 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Volunteer status - opt-in, since most publishers hold no volunteer
+              assignment and would only be shown a way to log hours they will
+              never be given. */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-3">
+              Do you do volunteer work?
+            </label>
+            <label
+              className={`flex items-start space-x-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                isVolunteer
+                  ? 'border-emerald-500 bg-emerald-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={isVolunteer}
+                onChange={(e) => setIsVolunteer(e.target.checked)}
+                className="mt-0.5 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                disabled={loading || uploading}
+              />
+              <div>
+                <div className="flex items-center space-x-2 font-medium text-gray-800">
+                  <HardHat size={16} className="text-emerald-600" />
+                  <span>I do volunteer work</span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  LDC, regional building, disaster relief and similar assignments
+                  that award hour credits. You can turn this on later in Settings.
+                </div>
+              </div>
+            </label>
           </div>
 
           {/* Submit Button */}

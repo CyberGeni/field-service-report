@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   AlertTriangle,
   Check,
@@ -17,6 +17,7 @@ import { formatHoursMinutes } from '../utils/dateUtils';
 import { getReportStatus, ReportStatusTone } from '../utils/reportReconciliation';
 import { MINUTES_PER_HOUR } from '../utils/reportRounding';
 import { ACTIVITY_META } from '../utils/activityTypes';
+import MonthPicker from './MonthPicker';
 
 interface MonthlyReportSummaryProps {
   report: MonthlyReport;
@@ -25,6 +26,10 @@ interface MonthlyReportSummaryProps {
   canGoNext: boolean;
   onPreviousMonth: () => void;
   onNextMonth: () => void;
+  // Jumping straight to a month, from the picker opened off the month heading
+  onSelectMonth: (month: number, year: number) => void;
+  // The earliest month with anything logged - nothing before it is worth showing
+  earliestMonth: string;
   // Minutes the previous month held back for this one
   carriedInMinutes: number;
   submission?: ReportSubmission;
@@ -47,6 +52,8 @@ const MonthlyReportSummary: React.FC<MonthlyReportSummaryProps> = ({
   canGoNext,
   onPreviousMonth,
   onNextMonth,
+  onSelectMonth,
+  earliestMonth,
   carriedInMinutes,
   submission,
   trackingStartMonth,
@@ -55,6 +62,7 @@ const MonthlyReportSummary: React.FC<MonthlyReportSummaryProps> = ({
 }) => {
   const { copy, copied } = useCopyToClipboard();
   const { addToast } = useToast();
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
 
   const loggedMinutes = Math.round(report.hours * MINUTES_PER_HOUR);
   // Copying from here sends the time exactly as logged; the start-of-month prompt is
@@ -153,9 +161,13 @@ const MonthlyReportSummary: React.FC<MonthlyReportSummaryProps> = ({
           <ChevronLeft size={20} />
         </button>
 
-        <p className="text-base font-semibold text-gray-800">
+        <button
+          type="button"
+          onClick={() => setShowMonthPicker(true)}
+          className="text-base font-semibold text-gray-800 px-3 py-1 rounded-lg hover:bg-gray-100 transition-colors"
+        >
           {report.month} {report.year}
-        </p>
+        </button>
 
         <button
           type="button"
@@ -167,6 +179,14 @@ const MonthlyReportSummary: React.FC<MonthlyReportSummaryProps> = ({
           <ChevronRight size={20} />
         </button>
       </div>
+
+      <MonthPicker
+        isOpen={showMonthPicker}
+        onClose={() => setShowMonthPicker(false)}
+        monthKey={report.monthKey}
+        earliestMonth={earliestMonth}
+        onSelect={onSelectMonth}
+      />
 
       {/* Hold the previous month's figures while the next one loads */}
       <div className={`space-y-3 transition-opacity duration-200 ${loading ? 'opacity-50' : 'opacity-100'}`}>

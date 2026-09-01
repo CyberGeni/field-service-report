@@ -1,5 +1,5 @@
 import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServiceSuggestion } from '../types';
-import { getCurrentMonth, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
+import { getCurrentMonth, getCurrentServiceYearStart, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 import { isPreachingActivity } from './activityTypes';
 
@@ -74,21 +74,13 @@ export const calculateMonthlyStats = (
   };
 };
 
-const getDefaultServiceYearStart = (): string => {
-  const now = new Date();
-  const month = now.getMonth(); // 0-indexed: 8 = September
-  const year = now.getFullYear();
-  return `${month >= 8 ? year : year - 1}-09`;
-};
-
 export const calculateYearlyStats = (
   records: ServiceRecord[],
   settings: Settings,
   profile?: Profile | null
 ): YearlyStats => {
   const currentDate = new Date();
-  const serviceYearStartStr = settings.serviceYearStart || getDefaultServiceYearStart();
-  const serviceYearStart = new Date(serviceYearStartStr + '-01');
+  const serviceYearStart = new Date(getCurrentServiceYearStart() + '-01');
   const serviceYearEnd = new Date(serviceYearStart.getFullYear() + 1, serviceYearStart.getMonth(), 0);
   
   const yearRecords = records.filter(record => {

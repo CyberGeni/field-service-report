@@ -26,9 +26,6 @@ export const formatReportText = (report: MonthlyReport): string =>
     `Bible Studies Conducted: ${report.studies}`
   ].join('\n');
 
-// Records can't predate the app, and there is nothing to report on a future month.
-const EARLIEST_MONTH = '2020-01';
-
 const toMonthKey = (month: number, year: number): string =>
   `${year}-${month.toString().padStart(2, '0')}`;
 
@@ -54,8 +51,19 @@ export const useMonthlyReport = (
   );
 
   const currentMonth = getCurrentMonth();
+
+  // Nowhere earlier than the first thing ever logged is worth going back to - a
+  // fresh account's earliest month is just wherever it opened.
+  const earliestMonth = useMemo(() => {
+    const firstRecordMonth = records.reduce<string | null>((earliest, record) => {
+      const monthKey = record.date.slice(0, 7);
+      return !earliest || monthKey < earliest ? monthKey : earliest;
+    }, null);
+    return firstRecordMonth ?? currentMonth;
+  }, [records, currentMonth]);
+
   const canGoNext = monthKey < currentMonth;
-  const canGoPrevious = monthKey > EARLIEST_MONTH;
+  const canGoPrevious = monthKey > earliestMonth;
 
   const report = useMemo<MonthlyReport>(() => {
     const totals = calculateMonthlyTotals(records, visits, [monthKey])[monthKey];
@@ -69,23 +77,27 @@ export const useMonthlyReport = (
   }, [records, visits, monthKey]);
 
   const goToPreviousMonth = useCallback(() => {
-    setMonthKey(prev => (prev > EARLIEST_MONTH ? addMonths(prev, -1) : prev));
-  }, []);
+    setMonthKey(prev => (prev > earliestMonth ? addMonths(prev, -1) : prev));
+  }, [earliestMonth]);
 
   const goToNextMonth = useCallback(() => {
     setMonthKey(prev => (prev < getCurrentMonth() ? addMonths(prev, 1) : prev));
   }, []);
 
-  const goToMonth = useCallback((month: number, year: number) => {
-    const next = toMonthKey(month, year);
-    if (next >= EARLIEST_MONTH && next <= getCurrentMonth()) {
-      setMonthKey(next);
-    }
-  }, []);
+  const goToMonth = useCallback(
+    (month: number, year: number) => {
+      const next = toMonthKey(month, year);
+      if (next >= earliestMonth && next <= getCurrentMonth()) {
+        setMonthKey(next);
+      }
+    },
+    [earliestMonth]
+  );
 
   return {
     report,
     monthKey,
+    earliestMonth,
     canGoPrevious,
     canGoNext,
     goToPreviousMonth,

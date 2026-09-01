@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, User } from 'lucide-r
 import { ServiceRecord, ServiceActivity, Settings, Profile } from '../types';
 import { ActivityMeta, getActivityMeta, getAvailableActivities, isCreditActivity } from '../utils/activityTypes';
 import { hasHourRequirement, getServiceTypeTargets } from '../utils/serviceTypes';
-import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getDateString } from '../utils/dateUtils';
+import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getDateString, getCurrentServiceYearStart } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
 import { useStudents } from '../hooks/useStudents';
 
@@ -610,12 +610,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
 
     } else {
       // ── Future month: spread yearly-needed hours over remaining service-year months ──
-      const syStr = settings.serviceYearStart || (() => {
-        const m = today.getMonth();
-        const y = today.getFullYear();
-        return `${m >= 8 ? y : y - 1}-09`;
-      })();
-      const [syYear, syMonthNum] = syStr.split('-').map(Number);
+      const [syYear, syMonthNum] = getCurrentServiceYearStart().split('-').map(Number);
       const serviceYearStart = new Date(syYear, syMonthNum - 1, 1);
       const serviceYearEndExcl = new Date(syYear + 1, syMonthNum - 1, 1); // exclusive
 

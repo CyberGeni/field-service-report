@@ -704,26 +704,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
-  const handleServiceYearChange = async (value: string) => {
-    try {
-      const updatedSettings = { ...localSettings, serviceYearStart: value };
-      setLocalSettings(updatedSettings);
-      await onUpdateSettings(updatedSettings);
-      addToast({
-        type: 'success',
-        title: 'Service Year Updated',
-        description: 'Service year start date updated successfully'
-      });
-    } catch (error) {
-      console.error('Error updating service year:', error);
-      addToast({
-        type: 'error',
-        title: 'Update Failed',
-        description: 'Failed to save service year'
-      });
-    }
-  };
-
   const handleImageError = () => {
     console.warn('Profile image failed to load:', profile?.avatar_url);
     setImageError(true);
@@ -861,16 +841,6 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </div>
           </div>
         )}
-        
-        <div className="mt-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Service Year Start</label>
-          <input
-            type="month"
-            value={localSettings.serviceYearStart}
-            onChange={(e) => handleServiceYearChange(e.target.value)}
-            className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors"
-          />
-        </div>
       </div>
 
       {/* Field Service Days */}

@@ -144,6 +144,7 @@ function App() {
       name: string;
       service_type: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer';
       avatar_url?: string;
+      is_volunteer: boolean;
     }) => {
       await createProfile(profileData);
       
@@ -187,7 +188,7 @@ function App() {
       case 'calendar':
         return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
       case 'stats':
-        return <StatsPage records={records} settings={settings} profile={profile} userId={user?.id} />;
+        return <StatsPage records={records} profile={profile} userId={user?.id} />;
       case 'students':
         return <StudentsTab />;
       case 'settings':

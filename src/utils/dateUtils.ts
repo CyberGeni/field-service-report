@@ -72,6 +72,17 @@ export const getCurrentMonth = (): string => {
   return `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
 };
 
+// JW service years always start in September - this isn't a per-user preference.
+export const SERVICE_YEAR_START_MONTH = 9;
+
+/** The YYYY-09 the service year in progress right now began in. */
+export const getCurrentServiceYearStart = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  // getMonth() is 0-indexed, so 8 = September
+  return `${now.getMonth() >= 8 ? year : year - 1}-09`;
+};
+
 export const getMonthName = (monthString: string): string => {
   const [year, month] = monthString.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1);

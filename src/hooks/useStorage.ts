@@ -13,15 +13,6 @@ const SETTINGS_CACHE = 'settings';
 const sortByDateDescending = (records: ServiceRecord[]): ServiceRecord[] =>
   [...records].sort((a, b) => b.date.localeCompare(a.date));
 
-// Dynamically calculate the current JW service year start (September of the appropriate year)
-const getDefaultServiceYearStart = (): string => {
-  const now = new Date();
-  const month = now.getMonth(); // 0-indexed: 8 = September
-  const year = now.getFullYear();
-  const serviceYearYear = month >= 8 ? year : year - 1;
-  return `${serviceYearYear}-09`;
-};
-
 const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
   yearlyTarget: 120,
@@ -30,8 +21,7 @@ const DEFAULT_SETTINGS: Settings = {
     { day: 0, type: 'h2h', potentialHours: 3, label: 'Sunday - House to House/Return Visits' }
   ],
   username: '',
-  password: '',
-  serviceYearStart: getDefaultServiceYearStart()
+  password: ''
 };
 
 export const useStorage = () => {
@@ -164,7 +154,6 @@ export const useStorage = () => {
       monthlyTarget: settingsData.monthly_target,
       yearlyTarget: settingsData.yearly_target,
       fieldServiceDays,
-      serviceYearStart: settingsData.service_year_start || getDefaultServiceYearStart(),
       username: '', // We'll get this from profile
       password: '' // Not stored in database
     };
@@ -351,8 +340,7 @@ export const useStorage = () => {
           monthly_target: DEFAULT_SETTINGS.monthlyTarget,
           yearly_target: DEFAULT_SETTINGS.yearlyTarget,
           field_service_days: DEFAULT_SETTINGS.fieldServiceDays.map(fsd => fsd.day), // Legacy format
-          field_service_days_config: DEFAULT_SETTINGS.fieldServiceDays, // New format
-          service_year_start: DEFAULT_SETTINGS.serviceYearStart
+          field_service_days_config: DEFAULT_SETTINGS.fieldServiceDays // New format
         })
         .select()
         .single();
@@ -485,8 +473,7 @@ export const useStorage = () => {
       monthly_target: updatedSettings.monthlyTarget,
       yearly_target: updatedSettings.yearlyTarget,
       field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
-      field_service_days_config: updatedSettings.fieldServiceDays, // New format with full structure
-      service_year_start: updatedSettings.serviceYearStart
+      field_service_days_config: updatedSettings.fieldServiceDays // New format with full structure
     };
 
     // Settings apply on the device immediately and upload behind the user, so the

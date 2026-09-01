@@ -31,7 +31,6 @@ export interface Settings {
   fieldServiceDays: FieldServiceDay[];
   username: string;
   password: string;
-  serviceYearStart: string; // YYYY-MM format
 }
 
 export interface Profile {

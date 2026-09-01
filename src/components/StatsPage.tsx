@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
-import { ServiceRecord, Settings, Profile } from '../types';
+import { ServiceRecord, Profile } from '../types';
 import { canLogVolunteerHours } from '../utils/activityTypes';
 import { getStatsYearOptions, StatsPeriod, useStatsData } from '../hooks/useStatsData';
 import { useMonthlyReport } from '../hooks/useMonthlyReport';
@@ -12,12 +12,11 @@ import MonthlyReportSummary from './MonthlyReportSummary';
 
 interface StatsPageProps {
   records: ServiceRecord[];
-  settings: Settings;
   profile?: Profile | null;
   userId?: string;
 }
 
-const StatsPage: React.FC<StatsPageProps> = ({ records, settings, profile, userId }) => {
+const StatsPage: React.FC<StatsPageProps> = ({ records, profile, userId }) => {
   // Splitting the hours out only says something for someone who has both kinds
   const splitVolunteer = canLogVolunteerHours(profile);
   const [period, setPeriod] = useState<StatsPeriod>('calendarYear');
@@ -28,8 +27,8 @@ const StatsPage: React.FC<StatsPageProps> = ({ records, settings, profile, userI
   const { visits, loading, error } = useStudentVisits();
 
   const yearOptions = useMemo(
-    () => getStatsYearOptions(records, visits, period, settings.serviceYearStart),
-    [records, visits, period, settings.serviceYearStart]
+    () => getStatsYearOptions(records, visits, period),
+    [records, visits, period]
   );
 
   // Switching period can put the chosen year out of range (a 2019 service year, say,
@@ -39,17 +38,19 @@ const StatsPage: React.FC<StatsPageProps> = ({ records, settings, profile, userI
     ? selectedYear
     : yearOptions[0]?.value ?? selectedYear;
 
-  const data = useStatsData(records, visits, period, settings.serviceYearStart, year);
+  const data = useStatsData(records, visits, period, year);
 
   const { markSubmitted, clearSubmission, getSubmission, getCarryoverInto, trackingStartMonth } =
     useReportSubmissions(userId);
 
   const {
     report,
+    earliestMonth,
     canGoPrevious,
     canGoNext,
     goToPreviousMonth,
-    goToNextMonth
+    goToNextMonth,
+    goToMonth
   } = useMonthlyReport(records, visits);
 
   return (
@@ -89,6 +90,8 @@ const StatsPage: React.FC<StatsPageProps> = ({ records, settings, profile, userI
         canGoNext={canGoNext}
         onPreviousMonth={goToPreviousMonth}
         onNextMonth={goToNextMonth}
+        onSelectMonth={goToMonth}
+        earliestMonth={earliestMonth}
         carriedInMinutes={getCarryoverInto(report.monthKey)}
         submission={getSubmission(report.monthKey)}
         trackingStartMonth={trackingStartMonth}
