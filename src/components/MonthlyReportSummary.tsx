@@ -16,6 +16,7 @@ import { useToast } from './ui/toast';
 import { formatHoursMinutes } from '../utils/dateUtils';
 import { getReportStatus, ReportStatusTone } from '../utils/reportReconciliation';
 import { MINUTES_PER_HOUR } from '../utils/reportRounding';
+import { ACTIVITY_META } from '../utils/activityTypes';
 
 interface MonthlyReportSummaryProps {
   report: MonthlyReport;
@@ -104,13 +105,33 @@ const MonthlyReportSummary: React.FC<MonthlyReportSummaryProps> = ({
     });
   };
 
+  // Credited hours are already inside the total - the split is here so the user can
+  // see what the month was made of. It is deliberately not in the copied text, which
+  // stays the plain total the congregation asks for.
+  const breakdown = [
+    { label: 'Field Service', hours: report.preachingHours, indent: true },
+    { label: ACTIVITY_META.volunteer.label, hours: report.volunteerHours, indent: true },
+    { label: ACTIVITY_META.school.label, hours: report.schoolHours, indent: true }
+  ].filter(row => row.hours > 0);
+
   const stats = [
-    { label: 'Total Hours', value: formatHoursMinutes(report.hours) },
-    ...(carriedInMinutes > 0
-      ? [{ label: 'Carried Over', value: `+${carriedInMinutes}min` }]
+    { label: 'Total Hours', value: formatHoursMinutes(report.hours), indent: false },
+    ...(report.creditHours > 0
+      ? breakdown.map(row => ({
+          label: row.label,
+          value: formatHoursMinutes(row.hours),
+          indent: true
+        }))
       : []),
-    { label: 'Bible Studies Conducted', value: `${report.studies}` },
-    { label: 'Weekly Average', value: `${formatHoursMinutes(report.weeklyAverage)}/week` }
+    ...(carriedInMinutes > 0
+      ? [{ label: 'Carried Over', value: `+${carriedInMinutes}min`, indent: false }]
+      : []),
+    { label: 'Bible Studies Conducted', value: `${report.studies}`, indent: false },
+    {
+      label: 'Weekly Average',
+      value: `${formatHoursMinutes(report.weeklyAverage)}/week`,
+      indent: false
+    }
   ];
 
   return (
@@ -151,8 +172,16 @@ const MonthlyReportSummary: React.FC<MonthlyReportSummaryProps> = ({
       <div className={`space-y-3 transition-opacity duration-200 ${loading ? 'opacity-50' : 'opacity-100'}`}>
         {stats.map(stat => (
           <div key={stat.label} className="flex justify-between items-center">
-            <span className="text-gray-600">{stat.label}</span>
-            <span className="font-semibold text-lg text-gray-900 tabular-nums">{stat.value}</span>
+            <span className={stat.indent ? 'text-gray-500 text-sm pl-4' : 'text-gray-600'}>
+              {stat.label}
+            </span>
+            <span
+              className={`font-semibold tabular-nums ${
+                stat.indent ? 'text-sm text-gray-600' : 'text-lg text-gray-900'
+              }`}
+            >
+              {stat.value}
+            </span>
           </div>
         ))}
       </div>

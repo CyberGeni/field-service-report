@@ -17,8 +17,11 @@ import {
 } from '../hooks/useStatsData';
 import { formatHoursMinutesShort, getMonthName } from '../utils/dateUtils';
 
-// Single series, so no legend: the card heading says what is plotted.
+// One series needs no legend - the card heading says what is plotted. A volunteer
+// gets a second line, and with it a legend, so identity is never colour alone.
+// Both hues pass the categorical checks against a white surface (CVD ΔE 20.1).
 const SERIES_COLOR = '#2a78d6';
+const VOLUNTEER_COLOR = '#059669';
 const GRID_COLOR = '#E5E7EB';
 const AXIS_TEXT_COLOR = '#6B7280';
 const SURFACE_COLOR = '#FFFFFF';
@@ -32,6 +35,9 @@ interface StatsChartProps {
   year: number;
   onYearChange: (year: number) => void;
   loading?: boolean;
+  // Volunteers are shown preaching and volunteer hours as separate lines; everyone
+  // else sees the one total, which is all their month is made of.
+  splitVolunteer?: boolean;
 }
 
 interface FilterSelectProps {
@@ -78,25 +84,67 @@ const FilterSelect: React.FC<FilterSelectProps> = ({ id, label, value, onChange,
 interface TooltipProps {
   active?: boolean;
   payload?: { payload: MonthlyStatPoint }[];
+  splitVolunteer?: boolean;
 }
 
-const ChartTooltip: React.FC<TooltipProps> = ({ active, payload }) => {
+const TooltipRow: React.FC<{ color?: string; label: string; value: string }> = ({
+  color,
+  label,
+  value
+}) => (
+  <div className="flex items-center justify-between space-x-4">
+    <span className="flex items-center space-x-2">
+      {color ? (
+        <span className="block w-3 h-0.5 rounded-full" style={{ backgroundColor: color }} />
+      ) : (
+        <span className="block w-3" />
+      )}
+      <span className="text-xs text-gray-600">{label}</span>
+    </span>
+    <span className="text-xs font-semibold text-gray-900 tabular-nums">{value}</span>
+  </div>
+);
+
+const ChartTooltip: React.FC<TooltipProps> = ({ active, payload, splitVolunteer }) => {
   if (!active || !payload || payload.length === 0) return null;
 
   const point = payload[0].payload;
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-lg px-3 py-2">
-      <div className="flex items-center space-x-2">
-        <span
-          className="block w-3 h-0.5 rounded-full"
-          style={{ backgroundColor: SERIES_COLOR }}
-        />
-        <span className="text-sm font-semibold text-gray-900">
-          {formatHoursMinutesShort(point.hours)}
-        </span>
-      </div>
-      <p className="text-xs text-gray-500 mt-1">
+    <div className="bg-white rounded-lg border border-gray-200 shadow-lg px-3 py-2 space-y-1">
+      {splitVolunteer ? (
+        <>
+          <TooltipRow
+            color={SERIES_COLOR}
+            label="Field service"
+            value={formatHoursMinutesShort(point.preachingHours)}
+          />
+          <TooltipRow
+            color={VOLUNTEER_COLOR}
+            label="Volunteer"
+            value={formatHoursMinutesShort(point.volunteerHours)}
+          />
+          {/* School credit has no line of its own - it is a one-off, not a trend -
+              but it is part of the total, so it is named here rather than hidden. */}
+          {point.schoolHours > 0 && (
+            <TooltipRow label="School credit" value={formatHoursMinutesShort(point.schoolHours)} />
+          )}
+          <div className="pt-1 border-t border-gray-100">
+            <TooltipRow label="Total" value={formatHoursMinutesShort(point.hours)} />
+          </div>
+        </>
+      ) : (
+        <div className="flex items-center space-x-2">
+          <span
+            className="block w-3 h-0.5 rounded-full"
+            style={{ backgroundColor: SERIES_COLOR }}
+          />
+          <span className="text-sm font-semibold text-gray-900">
+            {formatHoursMinutesShort(point.hours)}
+          </span>
+        </div>
+      )}
+      <p className="text-xs text-gray-500 pt-1">
         {getMonthName(point.month)} · {point.studies} {point.studies === 1 ? 'study' : 'studies'}
       </p>
     </div>
@@ -110,10 +158,18 @@ const StatsChart: React.FC<StatsChartProps> = ({
   yearOptions,
   year,
   onYearChange,
-  loading = false
+  loading = false,
+  splitVolunteer = false
 }) => {
   const hasData = data.length > 0;
   const hasHours = data.some(point => point.hours > 0);
+
+  const series = splitVolunteer
+    ? [
+        { key: 'preachingHours', label: 'Field service', color: SERIES_COLOR },
+        { key: 'volunteerHours', label: 'Volunteer', color: VOLUNTEER_COLOR }
+      ]
+    : [{ key: 'hours', label: 'Hours', color: SERIES_COLOR }];
 
   return (
     <div className="bg-white rounded-xl p-6">
@@ -154,6 +210,20 @@ const StatsChart: React.FC<StatsChartProps> = ({
         // While a new period loads, hold the previous render rather than flashing a
         // skeleton and jumping the layout.
         <div className={`transition-opacity duration-200 ${loading ? 'opacity-50' : 'opacity-100'}`}>
+          {/* Two lines never go unlabelled - colour alone is not an identity */}
+          {series.length > 1 && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3">
+              {series.map(line => (
+                <span key={line.key} className="flex items-center space-x-2">
+                  <span
+                    className="block w-4 h-0.5 rounded-full"
+                    style={{ backgroundColor: line.color }}
+                  />
+                  <span className="text-xs text-gray-600">{line.label}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
               <CartesianGrid stroke={GRID_COLOR} strokeWidth={1} vertical={false} />
@@ -173,26 +243,29 @@ const StatsChart: React.FC<StatsChartProps> = ({
                 width={44}
               />
               <Tooltip
-                content={<ChartTooltip />}
+                content={<ChartTooltip splitVolunteer={splitVolunteer} />}
                 cursor={{ stroke: '#D1D5DB', strokeWidth: 1 }}
               />
-              <Line
-                type="monotone"
-                dataKey="hours"
-                stroke={SERIES_COLOR}
-                strokeWidth={2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                // Redrawing the path on every period change is more distracting than
-                // it is polished, and mid-animation re-renders can drop the line.
-                isAnimationActive={false}
-                dot={
-                  data.length <= 14
-                    ? { r: 4, fill: SERIES_COLOR, stroke: SURFACE_COLOR, strokeWidth: 2 }
-                    : false
-                }
-                activeDot={{ r: 6, fill: SERIES_COLOR, stroke: SURFACE_COLOR, strokeWidth: 2 }}
-              />
+              {series.map(line => (
+                <Line
+                  key={line.key}
+                  type="monotone"
+                  dataKey={line.key}
+                  stroke={line.color}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  // Redrawing the path on every period change is more distracting than
+                  // it is polished, and mid-animation re-renders can drop the line.
+                  isAnimationActive={false}
+                  dot={
+                    data.length <= 14
+                      ? { r: 4, fill: line.color, stroke: SURFACE_COLOR, strokeWidth: 2 }
+                      : false
+                  }
+                  activeDot={{ r: 6, fill: line.color, stroke: SURFACE_COLOR, strokeWidth: 2 }}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
 

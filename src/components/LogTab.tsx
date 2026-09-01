@@ -1,13 +1,15 @@
-import React from 'react';
-import { Briefcase, BaggageClaim } from 'lucide-react';
-import { ServiceRecord, TimerState } from '../types';
+import React, { useState } from 'react';
+import { ServiceRecord, ServiceActivity, TimerState, Profile } from '../types';
 import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
+import { getAvailableActivities, getActivityMeta } from '../utils/activityTypes';
 import { useToast } from './ui/toast';
 import Timer from './Timer';
+import CreditEntryForm from './CreditEntryForm';
 
 interface LogTabProps {
   records: ServiceRecord[];
   settings: any;
+  profile?: Profile | null;
   onSaveRecord: (record: ServiceRecord) => void;
   timerState: TimerState;
   onStartTimer: () => void;
@@ -19,6 +21,7 @@ interface LogTabProps {
 const LogTab: React.FC<LogTabProps> = ({
   records,
   settings,
+  profile,
   onSaveRecord,
   timerState,
   onStartTimer,
@@ -26,8 +29,28 @@ const LogTab: React.FC<LogTabProps> = ({
   onStopTimer,
   onSetServiceType
 }) => {
-  const selectedType = timerState.serviceType;
   const { addToast } = useToast();
+  const activities = getAvailableActivities(profile);
+
+  // Preaching lives on the timer, which owns its type across tabs and reloads; a
+  // credit has no session to survive, so the choice of it is only this screen's.
+  const [creditActivity, setCreditActivity] = useState<ServiceActivity | null>(null);
+  const selectedType: ServiceActivity = creditActivity ?? timerState.serviceType;
+
+  // Turning volunteer status off while it was selected must not strand the tab on a
+  // form the user is no longer meant to see.
+  if (creditActivity && !activities.some(activity => activity.id === creditActivity)) {
+    setCreditActivity(null);
+  }
+
+  const handleSelectActivity = (activity: ServiceActivity) => {
+    if (getActivityMeta(activity).timed) {
+      setCreditActivity(null);
+      onSetServiceType(activity as 'h2h' | 'cart');
+      return;
+    }
+    setCreditActivity(activity);
+  };
 
   const today = new Date();
   const isFieldDay = isFieldServiceDay(today, settings.fieldServiceDays);
@@ -111,21 +134,18 @@ const LogTab: React.FC<LogTabProps> = ({
       <div className="bg-white rounded-xl p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Service Type</h3>
         <div className="grid grid-cols-2 gap-3">
-          {[
-            { id: 'h2h', label: 'House to House', subtitle: 'Door-to-door & return visits', icon: Briefcase },
-            { id: 'cart', label: 'Cart Witnessing', subtitle: 'Public witnessing', icon: BaggageClaim }
-          ].map(({ id, label, subtitle, icon: Icon }) => (
+          {activities.map(({ id, label, subtitle, icon: Icon, selectedCard, selectedIconBg }) => (
             <button
               key={id}
-              onClick={() => onSetServiceType(id as 'h2h' | 'cart')}
+              onClick={() => handleSelectActivity(id)}
               className={`p-4 rounded-xl transition-all duration-200 border-2 text-left ${
                 selectedType === id
-                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  ? selectedCard
                   : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
               }`}
             >
               <div className="flex flex-col items-center text-center space-y-2">
-                <div className={`p-2 rounded-lg ${selectedType === id ? 'bg-blue-100' : 'bg-white'}`}>
+                <div className={`p-2 rounded-lg ${selectedType === id ? selectedIconBg : 'bg-white'}`}>
                   <Icon size={24} />
                 </div>
                 <div>
@@ -138,13 +158,17 @@ const LogTab: React.FC<LogTabProps> = ({
         </div>
       </div>
 
-      {/* Timer */}
-      <Timer
-        timerState={timerState}
-        onStart={onStartTimer}
-        onPause={onPauseTimer}
-        onStop={handleTimerStop}
-      />
+      {/* Time is timed; credited hours are entered as the figure they were given as */}
+      {creditActivity ? (
+        <CreditEntryForm activity={creditActivity} onSaveRecord={onSaveRecord} />
+      ) : (
+        <Timer
+          timerState={timerState}
+          onStart={onStartTimer}
+          onPause={onPauseTimer}
+          onStop={handleTimerStop}
+        />
+      )}
     </div>
   );
 };

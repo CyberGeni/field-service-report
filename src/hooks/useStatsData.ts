@@ -14,7 +14,11 @@ export type StatsPeriod = 'lastQuarter' | 'calendarYear' | 'serviceYear' | 'allT
 export interface MonthlyStatPoint {
   month: string; // YYYY-MM
   label: string; // "Sep '25"
-  hours: number;
+  hours: number; // credits included, since they count toward the month
+  preachingHours: number;
+  volunteerHours: number;
+  schoolHours: number;
+  creditHours: number;
   studies: number;
   dailyAverage: number;
   weeklyAverage: number;

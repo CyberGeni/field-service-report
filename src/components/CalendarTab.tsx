@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, Briefcase, BaggageClaim, User } from 'lucide-react';
-import { ServiceRecord, Settings, Profile } from '../types';
+import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, User } from 'lucide-react';
+import { ServiceRecord, ServiceActivity, Settings, Profile } from '../types';
+import { ActivityMeta, getActivityMeta, getAvailableActivities, isCreditActivity } from '../utils/activityTypes';
 import { hasHourRequirement, getServiceTypeTargets } from '../utils/serviceTypes';
 import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getDateString } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
@@ -32,6 +33,8 @@ interface EntryModalProps {
   onDelete?: (id: string) => void;
   selectedDate: string;
   existingRecords: ServiceRecord[];
+  // Which service types this user may log - volunteer credit only for volunteers
+  activities: ActivityMeta[];
 }
 
 const EntryModal: React.FC<EntryModalProps> = ({
@@ -40,9 +43,10 @@ const EntryModal: React.FC<EntryModalProps> = ({
   onSave,
   onDelete,
   selectedDate,
-  existingRecords
+  existingRecords,
+  activities
 }) => {
-  const [selectedType, setSelectedType] = useState<'h2h' | 'cart'>('h2h');
+  const [selectedType, setSelectedType] = useState<ServiceActivity>('h2h');
   const [hours, setHours] = useState('');
   const [minutes, setMinutes] = useState('');
   const [notes, setNotes] = useState('');
@@ -55,7 +59,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
   const { students, saveStudent, saveStudentVisit, updateStudentVisit, deleteStudentVisit, loadVisitsByDate } = useStudents();
 
   // Load time/notes for a given service type — does NOT touch student entries
-  const loadFormForType = (type: 'h2h' | 'cart') => {
+  const loadFormForType = (type: ServiceActivity) => {
     const existing = existingRecords.find(r => r.type === type);
     setHours(existing ? existing.hours.toString() : '');
     setMinutes(existing ? existing.minutes.toString() : '');
@@ -65,11 +69,13 @@ const EntryModal: React.FC<EntryModalProps> = ({
   // Initialise on modal open — load form fields and pre-populate existing student visits
   React.useEffect(() => {
     if (isOpen) {
-      const hasH2H = existingRecords.some(r => r.type === 'h2h');
-      const hasCart = existingRecords.some(r => r.type === 'cart');
-      // Focus whichever type was already logged; if only Cart exists open on Cart,
-      // otherwise default to H2H (covers new entries and "both logged" cases).
-      const defaultType: 'h2h' | 'cart' = (hasCart && !hasH2H) ? 'cart' : 'h2h';
+      // Focus whichever type was already logged, preferring the first one on offer
+      // so a day holding only a credit opens on that credit rather than on an empty
+      // House to House form.
+      const logged = activities.find(activity =>
+        existingRecords.some(record => record.type === activity.id)
+      );
+      const defaultType: ServiceActivity = logged?.id ?? 'h2h';
       setSelectedType(defaultType);
       loadFormForType(defaultType);
       setSaving(false);
@@ -131,7 +137,11 @@ const EntryModal: React.FC<EntryModalProps> = ({
     const hoursNum = parseInt(hours) || 0;
     const minutesNum = parseInt(minutes) || 0;
     const existingRecord = existingRecords.find(r => r.type === selectedType);
-    const validEntries = studentEntries.filter(e => e.studentId || (e.isNew && e.newName.trim()));
+    // A school or volunteer credit is not a visit to anyone, so nothing new is
+    // recorded against it; removals stay, since those were an explicit action.
+    const validEntries = isCreditActivity(selectedType)
+      ? []
+      : studentEntries.filter(e => e.studentId || (e.isNew && e.newName.trim()));
 
     // Only require time when ADDING a new entry — not when editing an existing one,
     // because the user may intentionally clear time to delete the record while still
@@ -152,7 +162,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
       if (hoursNum === 0 && minutesNum === 0) {
         if (existingRecord && onDelete) {
           await onDelete(existingRecord.id);
-          addToast({ type: 'success', title: 'Entry Deleted', description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record removed` });
+          addToast({ type: 'success', title: 'Entry Deleted', description: `${getActivityMeta(selectedType).label} record removed` });
         } else {
           addToast({ type: 'info', title: 'No Changes', description: 'No time entered and no existing record to delete' });
         }
@@ -252,7 +262,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     setSaving(true);
     try {
       await onDelete(existingRecord.id);
-      addToast({ type: 'success', title: 'Entry Deleted', description: `${selectedType === 'h2h' ? 'House to House' : 'Cart Witnessing'} record removed` });
+      addToast({ type: 'success', title: 'Entry Deleted', description: `${getActivityMeta(selectedType).label} record removed` });
       onClose();
     } catch {
       addToast({ type: 'error', title: 'Delete Failed', description: 'Failed to delete service record' });
@@ -291,18 +301,15 @@ const EntryModal: React.FC<EntryModalProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-3">Service Type</label>
               <div className="grid grid-cols-2 gap-3">
-                {[
-                  { id: 'h2h', label: 'House to House', subtitle: 'Door-to-door & return visits', icon: Briefcase, color: 'blue' },
-                  { id: 'cart', label: 'Cart Witnessing', subtitle: 'Public witnessing', icon: BaggageClaim, color: 'purple' }
-                ].map(({ id, label, subtitle, icon: Icon, color }) => (
+                {activities.map(({ id, label, subtitle, icon: Icon, selectedCard, selectedIconBg }) => (
                   <button
                     key={id}
-                    onClick={() => { const t = id as 'h2h' | 'cart'; setSelectedType(t); loadFormForType(t); }}
+                    onClick={() => { setSelectedType(id); loadFormForType(id); }}
                     disabled={saving}
-                    className={`p-4 rounded-xl transition-all duration-200 border-2 text-left disabled:opacity-60 disabled:cursor-not-allowed ${selectedType === id ? `bg-${color}-50 text-${color}-700 border-${color}-200` : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'}`}
+                    className={`p-4 rounded-xl transition-all duration-200 border-2 text-left disabled:opacity-60 disabled:cursor-not-allowed ${selectedType === id ? selectedCard : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'}`}
                   >
                     <div className="flex flex-col items-center text-center space-y-2">
-                      <div className={`p-2 rounded-lg ${selectedType === id ? `bg-${color}-100` : 'bg-white'}`}>
+                      <div className={`p-2 rounded-lg ${selectedType === id ? selectedIconBg : 'bg-white'}`}>
                         <Icon size={24} />
                       </div>
                       <div>
@@ -315,14 +322,19 @@ const EntryModal: React.FC<EntryModalProps> = ({
               </div>
             </div>
 
-            {/* Time */}
+            {/* Time - worked for preaching, awarded for a credit */}
             <div>
+              {getActivityMeta(selectedType).hint && (
+                <p className="text-sm text-gray-500 mb-3">{getActivityMeta(selectedType).hint}</p>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={`block text-sm font-medium mb-2 ${timeError ? 'text-red-600' : 'text-gray-700'}`}>
                     Hours {timeError && <span className="text-red-500">*</span>}
                   </label>
-                  <input type="number" min="0" max="24" value={hours}
+                  {/* A school credit is 30 hours in one go, so the day's cap only
+                      applies to time that was actually spent */}
+                  <input type="number" min="0" max={isCreditActivity(selectedType) ? 999 : 24} value={hours}
                     onChange={e => { setHours(e.target.value); if (timeError) setTimeError(false); }}
                     disabled={saving}
                     className={`w-full p-3 rounded-xl focus:ring-2 focus:bg-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
@@ -358,12 +370,16 @@ const EntryModal: React.FC<EntryModalProps> = ({
               <label className="block text-sm font-medium text-gray-700 mb-2">Notes (optional)</label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                 disabled={saving}
-                placeholder={`Notes about your ${selectedType === 'h2h' ? 'house to house' : 'cart witnessing'} service…`}
+                placeholder={
+                  isCreditActivity(selectedType)
+                    ? `What this ${getActivityMeta(selectedType).label.toLowerCase()} was for…`
+                    : `Notes about your ${getActivityMeta(selectedType).label.toLowerCase()} service…`
+                }
                 className="w-full p-3 bg-gray-50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-colors resize-none disabled:opacity-60 disabled:cursor-not-allowed" />
             </div>
 
-            {/* ── Students Visited ── */}
-            <div>
+            {/* ── Students Visited ── (nothing to record against a credit) */}
+            <div className={isCreditActivity(selectedType) ? 'hidden' : ''}>
               <div className="flex items-center justify-between mb-3">
                 <label className="block text-sm font-medium text-gray-700">Students Visited</label>
                 <button type="button" onClick={addStudentEntry} disabled={saving}
@@ -476,15 +492,19 @@ const EntryModal: React.FC<EntryModalProps> = ({
               <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Already logged today:</h4>
                 <div className="space-y-1">
-                  {existingRecords.map(record => (
-                    <div key={record.id} className="flex items-center justify-between text-sm">
-                      <span className="flex items-center space-x-2">
-                        {record.type === 'h2h' ? <Briefcase size={14} className="text-blue-600" /> : <BaggageClaim size={14} className="text-purple-600" />}
-                        <span>{record.type === 'h2h' ? 'House to House' : 'Cart Witnessing'}</span>
-                      </span>
-                      <span className="font-medium">{record.hours}h {record.minutes}m</span>
-                    </div>
-                  ))}
+                  {existingRecords.map(record => {
+                    const meta = getActivityMeta(record.type);
+                    const RecordIcon = meta.icon;
+                    return (
+                      <div key={record.id} className="flex items-center justify-between text-sm">
+                        <span className="flex items-center space-x-2">
+                          <RecordIcon size={14} className={meta.accentText} />
+                          <span>{meta.label}</span>
+                        </span>
+                        <span className="font-medium">{record.hours}h {record.minutes}m</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -515,6 +535,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
 };
 
 const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, onSaveRecord, onDeleteRecord }) => {
+  // Volunteer credit is only part of this calendar for a user who does that work
+  const activities = getAvailableActivities(profile);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
@@ -670,15 +692,22 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
     };
   };
 
+  /**
+   * The dot under a day, coloured by what was logged on it.
+   *
+   * A day holding more than one kind gets a gradient across the first two, so the
+   * common case - preaching plus a credit - still reads as two things at a glance
+   * instead of collapsing to whichever was checked first.
+   */
   const getServiceTypeColor = (records: ServiceRecord[]): string => {
-    // Determine color based on service types present
-    const hasH2H = records.some(r => r.type === 'h2h');
-    const hasCart = records.some(r => r.type === 'cart');
-    
-    if (hasH2H && hasCart) return 'bg-gradient-to-r from-blue-500 to-purple-500';
-    if (hasH2H) return 'bg-blue-500';
-    if (hasCart) return 'bg-purple-500';
-    return 'bg-gray-500';
+    const present = activities.filter(activity =>
+      records.some(record => record.type === activity.id)
+    );
+
+    if (present.length === 0) return 'bg-gray-500';
+    if (present.length === 1) return present[0].dotColor;
+
+    return `bg-gradient-to-r ${present[0].gradientFrom} ${present[1].gradientTo}`;
   };
 
   const isFutureDate = (day: number): boolean => {
@@ -818,17 +847,15 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
       <div className="bg-white rounded-xl p-4">
         <h3 className="text-sm font-semibold text-gray-800 mb-3">Color codes</h3>
         <div className="grid grid-cols-2 gap-3 text-xs">
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-blue-500 rounded"></div>
-            <span>House to House</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-purple-500 rounded"></div>
-            <span>Cart Witnessing</span>
-          </div>
+          {activities.map(activity => (
+            <div key={activity.id} className="flex items-center space-x-2">
+              <div className={`w-3 h-3 ${activity.dotColor} rounded`}></div>
+              <span>{activity.label}</span>
+            </div>
+          ))}
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-purple-500 rounded"></div>
-            <span>Both Types</span>
+            <span>More than one</span>
           </div>
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
@@ -871,6 +898,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
         onDelete={onDeleteRecord}
         selectedDate={selectedDate}
         existingRecords={selectedDateRecords}
+        activities={activities}
       />
     </div>
   );

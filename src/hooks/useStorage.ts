@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ServiceRecord, Settings, FieldServiceDay } from '../types';
+import { ServiceRecord, ServiceActivity, Settings, FieldServiceDay } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
@@ -245,7 +245,8 @@ export const useStorage = () => {
         date: record.date,
         hours: record.hours,
         minutes: record.minutes,
-        type: record.type === 'rv' ? 'h2h' : record.type as 'h2h' | 'cart',
+        // 'rv' predates the merge of return visits into house-to-house
+        type: record.type === 'rv' ? 'h2h' : (record.type as ServiceActivity),
         notes: record.notes || undefined
       }));
 

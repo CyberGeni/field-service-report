@@ -7,7 +7,11 @@ export interface MonthlyReport {
   monthKey: string; // YYYY-MM
   month: string; // "September"
   year: number;
-  hours: number;
+  hours: number; // everything counting toward the month, credits included
+  preachingHours: number;
+  volunteerHours: number;
+  schoolHours: number;
+  creditHours: number;
   studies: number;
   dailyAverage: number;
   weeklyAverage: number;

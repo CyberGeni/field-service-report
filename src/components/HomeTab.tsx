@@ -4,6 +4,7 @@ import { ServiceRecord, Settings, Profile } from '../types';
 import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor, generateFieldServiceSuggestions } from '../utils/calculations';
 import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort, isFieldServiceDay } from '../utils/dateUtils';
 import { getServiceTypeTargets, getServiceTypeLabel, hasHourRequirement } from '../utils/serviceTypes';
+import { ACTIVITY_META } from '../utils/activityTypes';
 import CircularProgress from './CircularProgress';
 
 interface HomeTabProps {
@@ -183,6 +184,45 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           </div>
         </CircularProgress>
         
+        {/* What the month is made of. Credits count toward the total above, but a
+            month carried by a 30-hour school credit is a different month from one
+            spent in the field, and the ring alone cannot say which this was. */}
+        {monthlyStats.creditHours > 0 && (
+          <div className="mt-5 mx-auto max-w-xs space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center space-x-2 text-gray-600">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+                <span>Field service</span>
+              </span>
+              <span className="font-semibold text-gray-800 tabular-nums">
+                {formatHoursMinutesShort(monthlyStats.preachingHours)}
+              </span>
+            </div>
+            {monthlyStats.volunteerHours > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-2 text-gray-600">
+                  <span className={`w-2.5 h-2.5 rounded-full ${ACTIVITY_META.volunteer.dotColor}`} />
+                  <span>{ACTIVITY_META.volunteer.label}</span>
+                </span>
+                <span className="font-semibold text-gray-800 tabular-nums">
+                  {formatHoursMinutesShort(monthlyStats.volunteerHours)}
+                </span>
+              </div>
+            )}
+            {monthlyStats.schoolHours > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-2 text-gray-600">
+                  <span className={`w-2.5 h-2.5 rounded-full ${ACTIVITY_META.school.dotColor}`} />
+                  <span>{ACTIVITY_META.school.label}</span>
+                </span>
+                <span className="font-semibold text-gray-800 tabular-nums">
+                  {formatHoursMinutesShort(monthlyStats.schoolHours)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="mt-6">
           <div className="text-gray-600 font-medium">
             {getTargetDisplay()}

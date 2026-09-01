@@ -1,9 +1,19 @@
+/**
+ * What a logged entry represents: time spent preaching, or hours credited.
+ *
+ * `school` is a one-off credit for attending a theocratic school; `volunteer` is
+ * credit for a volunteer assignment and is only offered to users who have said they
+ * do that work. Both are logged as service records so they count toward the month
+ * without a second ledger to keep in step.
+ */
+export type ServiceActivity = 'h2h' | 'cart' | 'volunteer' | 'school';
+
 export interface ServiceRecord {
   id: string;
   date: string;
   hours: number;
   minutes: number;
-  type: 'h2h' | 'cart';
+  type: ServiceActivity;
   notes?: string;
   student_id?: string;
 }
@@ -29,8 +39,11 @@ export interface Profile {
   name: string;
   avatar_url?: string;
   service_type: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer';
-  created_at: string;
-  updated_at: string;
+  // Whether volunteer hour credits are offered to this user at all
+  is_volunteer?: boolean;
+  // Absent on a profile that has only just been assembled locally
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Student {
@@ -69,6 +82,11 @@ export interface TimerState {
 
 export interface MonthlyStats {
   totalHours: number;
+  // The same total split by where the hours came from
+  preachingHours: number;
+  volunteerHours: number;
+  schoolHours: number;
+  creditHours: number;
   targetHours: number;
   deficit: number;
   surplus: number;
@@ -79,6 +97,8 @@ export interface MonthlyStats {
 
 export interface YearlyStats {
   totalHours: number;
+  preachingHours: number;
+  creditHours: number;
   targetHours: number;
   monthsRemaining: number;
   hoursPerMonthNeeded: number;

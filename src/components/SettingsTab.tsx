@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim, CheckCircle } from 'lucide-react';
+import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim, CheckCircle, HardHat } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
 import { useToast } from './ui/toast';
@@ -347,7 +347,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
       await onSave({
         name: localProfile.name,
         service_type: localProfile.service_type,
-        avatar_url: localProfile.avatar_url
+        avatar_url: localProfile.avatar_url,
+        is_volunteer: Boolean(localProfile.is_volunteer)
       });
       addToast({
         type: 'success',
@@ -498,6 +499,41 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
                   </label>
                 ))}
               </div>
+            </div>
+
+            {/* Volunteer status - off for everyone until they say otherwise, since
+                most publishers hold no volunteer assignment and would only be shown
+                a way to log hours they will never be given. */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Volunteer Work</label>
+              <label
+                className={`flex items-start space-x-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                  localProfile.is_volunteer
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(localProfile.is_volunteer)}
+                  onChange={(e) =>
+                    setLocalProfile(prev => ({ ...prev, is_volunteer: e.target.checked }))
+                  }
+                  className="mt-0.5 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  disabled={saving}
+                />
+                <span>
+                  <span className="flex items-center space-x-2">
+                    <HardHat size={16} className="text-emerald-600" />
+                    <span className="font-medium text-gray-800">I do volunteer work</span>
+                  </span>
+                  <span className="block text-xs text-gray-500 mt-1">
+                    LDC, regional building, disaster relief and similar assignments that
+                    award hour credits. Turning this on adds Volunteer Credit to the
+                    service types you can log.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 
@@ -751,6 +787,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
                   ({getServiceTypeDescription(profile.service_type)})
                 </span>
               </p>
+              {profile.is_volunteer && (
+                <span className="inline-flex items-center space-x-1.5 mt-1.5 bg-emerald-50 text-emerald-700 text-xs font-medium px-2 py-1 rounded-lg">
+                  <HardHat size={12} />
+                  <span>Volunteer</span>
+                </span>
+              )}
               {imageError && profile.avatar_url && (
                 <p className="text-xs text-red-500 mt-1">Profile image failed to load</p>
               )}

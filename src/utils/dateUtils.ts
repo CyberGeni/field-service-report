@@ -54,8 +54,17 @@ export const isFieldServiceDay = (date: Date, fieldServiceDays: any[]): boolean 
   return fieldServiceDays.some(fsd => fsd.day === date.getDay());
 };
 
+/**
+ * A calendar date as YYYY-MM-DD, read in the user's own timezone.
+ *
+ * Built from the local parts rather than via toISOString: west of UTC an evening in
+ * the field would otherwise be filed under tomorrow, and a credit logged late on the
+ * last of the month would count toward the next one.
+ */
 export const getDateString = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
 };
 
 export const getCurrentMonth = (): string => {

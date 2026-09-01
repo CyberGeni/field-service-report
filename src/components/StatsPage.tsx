@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
-import { ServiceRecord, Settings } from '../types';
+import { ServiceRecord, Settings, Profile } from '../types';
+import { canLogVolunteerHours } from '../utils/activityTypes';
 import { getStatsYearOptions, StatsPeriod, useStatsData } from '../hooks/useStatsData';
 import { useMonthlyReport } from '../hooks/useMonthlyReport';
 import { useStudentVisits } from '../hooks/useStudentVisits';
@@ -12,10 +13,13 @@ import MonthlyReportSummary from './MonthlyReportSummary';
 interface StatsPageProps {
   records: ServiceRecord[];
   settings: Settings;
+  profile?: Profile | null;
   userId?: string;
 }
 
-const StatsPage: React.FC<StatsPageProps> = ({ records, settings, userId }) => {
+const StatsPage: React.FC<StatsPageProps> = ({ records, settings, profile, userId }) => {
+  // Splitting the hours out only says something for someone who has both kinds
+  const splitVolunteer = canLogVolunteerHours(profile);
   const [period, setPeriod] = useState<StatsPeriod>('calendarYear');
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
 
@@ -73,9 +77,10 @@ const StatsPage: React.FC<StatsPageProps> = ({ records, settings, userId }) => {
         year={year}
         onYearChange={setSelectedYear}
         loading={loading}
+        splitVolunteer={splitVolunteer}
       />
 
-      <StatsTable data={data} />
+      <StatsTable data={data} splitVolunteer={splitVolunteer} />
 
       <MonthlyReportSummary
         report={report}

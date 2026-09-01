@@ -166,8 +166,6 @@ function App() {
       />
     );
   }
-// there should be an option to log hour credits (from ldc, theocratic schools, other assignments) in general per month
-
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'log':
@@ -175,6 +173,7 @@ function App() {
           <LogTab 
             records={records} 
             settings={settings} 
+            profile={profile}
             onSaveRecord={saveRecord}
             timerState={timerState}
             onStartTimer={startTimer}
@@ -188,7 +187,7 @@ function App() {
       case 'calendar':
         return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
       case 'stats':
-        return <StatsPage records={records} settings={settings} userId={user?.id} />;
+        return <StatsPage records={records} settings={settings} profile={profile} userId={user?.id} />;
       case 'students':
         return <StudentsTab />;
       case 'settings':

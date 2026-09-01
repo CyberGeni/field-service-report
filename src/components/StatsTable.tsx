@@ -5,10 +5,12 @@ import { formatHoursMinutesShort, getShortMonthLabel } from '../utils/dateUtils'
 
 interface StatsTableProps {
   data: MonthlyStatPoint[];
+  // A volunteer's hours come from two places, so the total alone hides half of it
+  splitVolunteer?: boolean;
 }
 
 // Newest month first - the one the reader is most likely looking for
-const StatsTable: React.FC<StatsTableProps> = ({ data }) => {
+const StatsTable: React.FC<StatsTableProps> = ({ data, splitVolunteer = false }) => {
   const rows = [...data].sort((a, b) => b.month.localeCompare(a.month));
 
   return (
@@ -26,7 +28,15 @@ const StatsTable: React.FC<StatsTableProps> = ({ data }) => {
             <thead>
               <tr className="border-b border-gray-200 text-gray-500">
                 <th className="text-left font-medium py-2 px-2">Month</th>
-                <th className="text-right font-medium py-2 px-2">Hours</th>
+                {splitVolunteer && (
+                  <>
+                    <th className="text-right font-medium py-2 px-2">Field</th>
+                    <th className="text-right font-medium py-2 px-2">Volunteer</th>
+                  </>
+                )}
+                <th className="text-right font-medium py-2 px-2">
+                  {splitVolunteer ? 'Total' : 'Hours'}
+                </th>
                 <th className="text-right font-medium py-2 px-2">Studies</th>
                 <th className="text-right font-medium py-2 px-2 whitespace-nowrap">Avg/week</th>
               </tr>
@@ -37,6 +47,16 @@ const StatsTable: React.FC<StatsTableProps> = ({ data }) => {
                   <td className="py-2.5 px-2 text-gray-800 whitespace-nowrap">
                     {getShortMonthLabel(row.month)}
                   </td>
+                  {splitVolunteer && (
+                    <>
+                      <td className="py-2.5 px-2 text-right text-gray-600 whitespace-nowrap">
+                        {formatHoursMinutesShort(row.preachingHours)}
+                      </td>
+                      <td className="py-2.5 px-2 text-right text-gray-600 whitespace-nowrap">
+                        {formatHoursMinutesShort(row.volunteerHours)}
+                      </td>
+                    </>
+                  )}
                   <td className="py-2.5 px-2 text-right font-medium text-gray-900 whitespace-nowrap">
                     {formatHoursMinutesShort(row.hours)}
                   </td>

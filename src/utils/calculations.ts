@@ -1,6 +1,29 @@
 import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServiceSuggestion } from '../types';
 import { getCurrentMonth, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
+import { isPreachingActivity } from './activityTypes';
+
+/**
+ * Minutes in a set of records, split by where the hours came from.
+ *
+ * Credits count toward the month exactly like preached time does - they are hours on
+ * the report either way - but the split is kept so a screen can show what the month
+ * was actually made of instead of one opaque figure.
+ */
+const splitMinutes = (records: ServiceRecord[]) => {
+  let preaching = 0;
+  let volunteer = 0;
+  let school = 0;
+
+  records.forEach(record => {
+    const minutes = getTotalMinutes(record.hours, record.minutes);
+    if (record.type === 'volunteer') volunteer += minutes;
+    else if (record.type === 'school') school += minutes;
+    else preaching += minutes;
+  });
+
+  return { preaching, volunteer, school, credit: volunteer + school, total: preaching + volunteer + school };
+};
 
 export const calculateMonthlyStats = (
   records: ServiceRecord[],
@@ -9,12 +32,9 @@ export const calculateMonthlyStats = (
   profile?: Profile | null
 ): MonthlyStats => {
   const monthRecords = records.filter(record => record.date.startsWith(month));
-  
-  const totalMinutes = monthRecords.reduce((total, record) => {
-    return total + getTotalMinutes(record.hours, record.minutes);
-  }, 0);
-  
-  const totalHours = totalMinutes / 60;
+
+  const minutes = splitMinutes(monthRecords);
+  const totalHours = minutes.total / 60;
   
   // Use service type targets only if the service type has requirements
   // Otherwise, use custom settings
@@ -41,6 +61,10 @@ export const calculateMonthlyStats = (
   
   return {
     totalHours,
+    preachingHours: minutes.preaching / 60,
+    volunteerHours: minutes.volunteer / 60,
+    schoolHours: minutes.school / 60,
+    creditHours: minutes.credit / 60,
     targetHours,
     deficit,
     surplus,
@@ -72,11 +96,8 @@ export const calculateYearlyStats = (
     return recordDate >= serviceYearStart && recordDate <= serviceYearEnd;
   });
   
-  const totalMinutes = yearRecords.reduce((total, record) => {
-    return total + getTotalMinutes(record.hours, record.minutes);
-  }, 0);
-  
-  const totalHours = totalMinutes / 60;
+  const minutes = splitMinutes(yearRecords);
+  const totalHours = minutes.total / 60;
   
   // Use service type targets only if the service type has requirements
   // Otherwise, use custom settings
@@ -95,6 +116,8 @@ export const calculateYearlyStats = (
   
   return {
     totalHours,
+    preachingHours: minutes.preaching / 60,
+    creditHours: minutes.credit / 60,
     targetHours,
     monthsRemaining,
     hoursPerMonthNeeded,
@@ -138,7 +161,11 @@ export const generateFieldServiceSuggestions = (
   const daysInMonth = monthEnd.getDate();
 
   const suggestions: FieldServiceSuggestion[] = [];
-  const recordedDates = new Set(records.filter(r => r.date.startsWith(month)).map(r => r.date));
+  // A credit logged on a date says nothing about whether that day was worked, so it
+  // must not silence the suggestion for it.
+  const recordedDates = new Set(
+    records.filter(r => r.date.startsWith(month) && isPreachingActivity(r.type)).map(r => r.date)
+  );
 
   // Generate suggestions for remaining days in the month (starting from appropriate day)
   for (let day = startDay; day <= daysInMonth; day++) {
@@ -202,7 +229,11 @@ export const getProgressBarColor = (current: number, target: number): string => 
   return 'bg-red-500';
 };
 export interface MonthlyTotals {
-  hours: number;
+  hours: number; // everything that counts toward the month, credits included
+  preachingHours: number;
+  volunteerHours: number;
+  schoolHours: number;
+  creditHours: number; // volunteer + school
   studies: number;
   dailyAverage: number;
   weeklyAverage: number;
@@ -227,13 +258,14 @@ export const calculateMonthlyTotals = (
   visits: VisitSummary[],
   months: string[]
 ): Record<string, MonthlyTotals> => {
-  const minutesByMonth = new Map<string, number>();
+  const recordsByMonth = new Map<string, ServiceRecord[]>();
   const studentsByMonth = new Map<string, Set<string>>();
 
   records.forEach(record => {
     const monthKey = record.date.slice(0, 7);
-    const minutes = getTotalMinutes(record.hours, record.minutes);
-    minutesByMonth.set(monthKey, (minutesByMonth.get(monthKey) || 0) + minutes);
+    const forMonth = recordsByMonth.get(monthKey) || [];
+    forMonth.push(record);
+    recordsByMonth.set(monthKey, forMonth);
   });
 
   visits.forEach(visit => {
@@ -246,12 +278,23 @@ export const calculateMonthlyTotals = (
   const totals: Record<string, MonthlyTotals> = {};
 
   months.forEach(monthKey => {
-    const hours = (minutesByMonth.get(monthKey) || 0) / 60;
+    const minutes = splitMinutes(recordsByMonth.get(monthKey) || []);
+    const hours = minutes.total / 60;
     const daysElapsed = getDaysElapsedInMonth(monthKey);
-    const dailyAverage = daysElapsed > 0 ? hours / daysElapsed : 0;
+    // A credit is awarded once, not earned a little at a time, so it has no daily
+    // rate to report - dividing a lump sum by "days elapsed so far" would only
+    // balloon into a nonsense projection the earlier in the month it lands (a
+    // 30-hour school credit logged on day one would read as 210 hours a week).
+    // The pace stats track preaching alone; Total Hours above still counts credits.
+    const preachingHours = minutes.preaching / 60;
+    const dailyAverage = daysElapsed > 0 ? preachingHours / daysElapsed : 0;
 
     totals[monthKey] = {
       hours,
+      preachingHours,
+      volunteerHours: minutes.volunteer / 60,
+      schoolHours: minutes.school / 60,
+      creditHours: minutes.credit / 60,
       studies: studentsByMonth.get(monthKey)?.size || 0,
       dailyAverage,
       // Averaged over the days lived so far, so a month in progress reads as the pace

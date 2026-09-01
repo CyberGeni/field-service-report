@@ -2,17 +2,13 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { clearCache, readCache, writeCache } from '../utils/offlineCache'
+import { Profile } from '../types'
 
 const PROFILE_CACHE = 'profile'
 
-export interface Profile {
-  id: string
-  name: string
-  avatar_url?: string
-  service_type: 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'
-  created_at?: string
-  updated_at?: string
-}
+// The one definition lives with the rest of the app's types; re-exported here so
+// callers of this hook can name what it returns without a second import.
+export type { Profile }
 
 export function useProfile(user: any) {
   const [profile, setProfile] = useState<Profile | null>(null)
