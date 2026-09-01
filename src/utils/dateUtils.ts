@@ -10,15 +10,24 @@ export const formatTimeFromMinutes = (totalMinutes: number): string => {
   return formatTime(hours, minutes);
 };
 
+/**
+ * Split a duration into whole hours and minutes.
+ *
+ * Rounds the total to the nearest minute before splitting, so a value just shy of a
+ * whole hour (1.999) reads as "2h 00min" rather than the impossible "1h 60min".
+ */
+const splitHoursMinutes = (totalHours: number): { hours: number; minutes: number } => {
+  const totalMinutes = Math.round(totalHours * 60);
+  return { hours: Math.floor(totalMinutes / 60), minutes: totalMinutes % 60 };
+};
+
 export const formatHoursMinutes = (totalHours: number): string => {
-  const hours = Math.floor(totalHours);
-  const minutes = Math.round((totalHours % 1) * 60);
+  const { hours, minutes } = splitHoursMinutes(totalHours);
   return `${hours}h ${minutes.toString().padStart(2, '0')}min`;
 };
 
 export const formatHoursMinutesShort = (totalHours: number): string => {
-  const hours = Math.floor(totalHours);
-  const minutes = Math.round((totalHours % 1) * 60);
+  const { hours, minutes } = splitHoursMinutes(totalHours);
   if (hours === 0) {
     return `${minutes}min`;
   }
@@ -66,4 +75,71 @@ export const getDaysInMonth = (year: number, month: number): number => {
 
 export const getFirstDayOfMonth = (year: number, month: number): number => {
   return new Date(year, month - 1, 1).getDay();
+};
+// --- Month-key helpers (YYYY-MM) used by the stats and monthly report views ---
+
+export const getMonthKey = (date: Date): string => {
+  return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+};
+
+export const parseMonthKey = (monthKey: string): { year: number; month: number } => {
+  const [year, month] = monthKey.split('-').map(Number);
+  return { year, month };
+};
+
+export const addMonths = (monthKey: string, months: number): string => {
+  const { year, month } = parseMonthKey(monthKey);
+  return getMonthKey(new Date(year, month - 1 + months, 1));
+};
+
+// "Sep '25" - compact enough for a chart axis on a phone
+export const getShortMonthLabel = (monthKey: string): string => {
+  const { year, month } = parseMonthKey(monthKey);
+  const date = new Date(year, month - 1);
+  return `${date.toLocaleDateString('en-US', { month: 'short' })} '${date
+    .getFullYear()
+    .toString()
+    .slice(-2)}`;
+};
+
+// First and last calendar day of a month, as YYYY-MM-DD (safe for date column filters)
+export const getMonthBounds = (monthKey: string): { start: string; end: string } => {
+  const { year, month } = parseMonthKey(monthKey);
+  const lastDay = getDaysInMonth(year, month);
+  return {
+    start: `${monthKey}-01`,
+    end: `${monthKey}-${lastDay.toString().padStart(2, '0')}`
+  };
+};
+
+// Days that have actually happened in a month - the current month counts only up to
+// today so its daily average isn't diluted by days not yet lived.
+export const getDaysElapsedInMonth = (monthKey: string): number => {
+  const { year, month } = parseMonthKey(monthKey);
+  const daysInMonth = getDaysInMonth(year, month);
+  const now = new Date();
+
+  if (now.getFullYear() === year && now.getMonth() + 1 === month) {
+    return Math.min(now.getDate(), daysInMonth);
+  }
+
+  // Months entirely in the future have no elapsed days yet
+  if (new Date(year, month - 1, 1) > now) {
+    return 0;
+  }
+
+  return daysInMonth;
+};
+
+// Inclusive list of month keys from start to end, e.g. 2025-07 .. 2025-09
+export const listMonthKeys = (startMonth: string, endMonth: string): string[] => {
+  const months: string[] = [];
+  let current = startMonth;
+
+  while (current <= endMonth) {
+    months.push(current);
+    current = addMonths(current, 1);
+  }
+
+  return months;
 };

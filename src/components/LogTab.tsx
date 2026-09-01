@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Briefcase, BaggageClaim } from 'lucide-react';
 import { ServiceRecord, TimerState } from '../types';
 import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
@@ -12,7 +12,8 @@ interface LogTabProps {
   timerState: TimerState;
   onStartTimer: () => void;
   onPauseTimer: () => void;
-  onStopTimer: () => number;
+  onStopTimer: () => { totalTime: number; serviceType: 'h2h' | 'cart' };
+  onSetServiceType: (type: 'h2h' | 'cart') => void;
 }
 
 const LogTab: React.FC<LogTabProps> = ({
@@ -22,9 +23,10 @@ const LogTab: React.FC<LogTabProps> = ({
   timerState,
   onStartTimer,
   onPauseTimer,
-  onStopTimer
+  onStopTimer,
+  onSetServiceType
 }) => {
-  const [selectedType, setSelectedType] = useState<'h2h' | 'cart'>('h2h');
+  const selectedType = timerState.serviceType;
   const { addToast } = useToast();
 
   const today = new Date();
@@ -47,8 +49,10 @@ const LogTab: React.FC<LogTabProps> = ({
   const hasLoggedLastFieldDay = records.some(r => r.date === lastFieldServiceDateString);
 
   const handleTimerStop = () => {
-    const totalMs = onStopTimer();
-    const totalMinutes = Math.floor(totalMs / 60000);
+    // Read the type back from the stopped session rather than from a render-time
+    // value, so the record always matches what was selected for that session.
+    const { totalTime, serviceType } = onStopTimer();
+    const totalMinutes = Math.floor(totalTime / 60000);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
 
@@ -58,7 +62,7 @@ const LogTab: React.FC<LogTabProps> = ({
         date: getDateString(new Date()),
         hours,
         minutes,
-        type: selectedType,
+        type: serviceType,
       };
 
       onSaveRecord(timerRecord);
@@ -113,7 +117,7 @@ const LogTab: React.FC<LogTabProps> = ({
           ].map(({ id, label, subtitle, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setSelectedType(id as 'h2h' | 'cart')}
+              onClick={() => onSetServiceType(id as 'h2h' | 'cart')}
               className={`p-4 rounded-xl transition-all duration-200 border-2 text-left ${
                 selectedType === id
                   ? 'bg-blue-50 text-blue-700 border-blue-200'

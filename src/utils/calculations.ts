@@ -1,5 +1,5 @@
 import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServiceSuggestion } from '../types';
-import { getCurrentMonth, getTotalMinutes } from './dateUtils';
+import { getCurrentMonth, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 
 export const calculateMonthlyStats = (
@@ -200,4 +200,84 @@ export const getProgressBarColor = (current: number, target: number): string => 
   if (percentage >= 75) return 'bg-blue-500';
   if (percentage >= 50) return 'bg-yellow-500';
   return 'bg-red-500';
+};
+export interface MonthlyTotals {
+  hours: number;
+  studies: number;
+  dailyAverage: number;
+  weeklyAverage: number;
+}
+
+const DAYS_PER_WEEK = 7;
+
+// Only the two columns the stats views actually aggregate over
+export interface VisitSummary {
+  visit_date: string;
+  student_id: string;
+}
+
+/**
+ * Hours and unique bible studies for each of the given months, in one pass.
+ *
+ * Records and visits are already in memory by the time the stats screen renders, so
+ * this stays synchronous: changing month or period must never wait on the network.
+ */
+export const calculateMonthlyTotals = (
+  records: ServiceRecord[],
+  visits: VisitSummary[],
+  months: string[]
+): Record<string, MonthlyTotals> => {
+  const minutesByMonth = new Map<string, number>();
+  const studentsByMonth = new Map<string, Set<string>>();
+
+  records.forEach(record => {
+    const monthKey = record.date.slice(0, 7);
+    const minutes = getTotalMinutes(record.hours, record.minutes);
+    minutesByMonth.set(monthKey, (minutesByMonth.get(monthKey) || 0) + minutes);
+  });
+
+  visits.forEach(visit => {
+    const monthKey = visit.visit_date.slice(0, 7);
+    const students = studentsByMonth.get(monthKey) || new Set<string>();
+    students.add(visit.student_id);
+    studentsByMonth.set(monthKey, students);
+  });
+
+  const totals: Record<string, MonthlyTotals> = {};
+
+  months.forEach(monthKey => {
+    const hours = (minutesByMonth.get(monthKey) || 0) / 60;
+    const daysElapsed = getDaysElapsedInMonth(monthKey);
+    const dailyAverage = daysElapsed > 0 ? hours / daysElapsed : 0;
+
+    totals[monthKey] = {
+      hours,
+      studies: studentsByMonth.get(monthKey)?.size || 0,
+      dailyAverage,
+      // Averaged over the days lived so far, so a month in progress reads as the pace
+      // it is actually being worked at rather than being diluted by days to come.
+      weeklyAverage: dailyAverage * DAYS_PER_WEEK
+    };
+  });
+
+  return totals;
+};
+
+/** Earliest and latest month holding any data, or null when there is none. */
+export const getDataMonthBounds = (
+  records: ServiceRecord[],
+  visits: VisitSummary[]
+): { first: string; last: string } | null => {
+  let first: string | null = null;
+  let last: string | null = null;
+
+  const consider = (monthKey: string) => {
+    if (!first || monthKey < first) first = monthKey;
+    if (!last || monthKey > last) last = monthKey;
+  };
+
+  records.forEach(record => consider(record.date.slice(0, 7)));
+  visits.forEach(visit => consider(visit.visit_date.slice(0, 7)));
+
+  return first && last ? { first, last } : null;
 };

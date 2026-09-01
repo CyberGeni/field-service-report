@@ -64,6 +64,7 @@ export interface TimerState {
   startTime: number | null;
   pausedTime: number;
   totalTime: number;
+  serviceType: 'h2h' | 'cart';
 }
 
 export interface MonthlyStats {

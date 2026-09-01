@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Home, Calendar, Settings, Users } from 'lucide-react';
+import { BarChart3, Clock, Home, Calendar, Settings, Users } from 'lucide-react';
 
 interface NavigationProps {
   activeTab: string;
@@ -12,6 +12,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, timerRu
     { id: 'calendar', label: 'Calendar', icon: Calendar },
     { id: 'log', label: 'Log', icon: Clock },
     { id: 'home', label: 'Home', icon: Home },
+    { id: 'stats', label: 'Stats', icon: BarChart3 },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
@@ -23,7 +24,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, timerRu
           <button
             key={id}
             onClick={() => onTabChange(id)}
-            className={`flex flex-col items-center py-2 px-3 rounded-lg transition-all duration-200 flex-1 relative ${
+            className={`flex flex-col items-center py-2 px-1 rounded-lg transition-all duration-200 flex-1 relative ${
               activeTab === id
                 ? 'text-blue-600 bg-blue-50'
                 : 'text-gray-500 hover:text-gray-700'

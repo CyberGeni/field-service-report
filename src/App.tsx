@@ -4,13 +4,17 @@ import LogTab from './components/LogTab';
 import HomeTab from './components/HomeTab';
 import CalendarTab from './components/CalendarTab';
 import StudentsTab from './components/StudentsTab';
+import StatsPage from './components/StatsPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import SettingsTab from './components/SettingsTab';
+import MonthlyReportPrompt from './components/MonthlyReportPrompt';
 import SplashScreen from './components/auth/SplashScreen';
 import SignInForm from './components/auth/SignInForm';
 import SignUpForm from './components/auth/SignUpForm';
 import ForgotPasswordForm from './components/auth/ForgotPasswordForm';
 import ProfileSetup from './components/ProfileSetup';
 import { useStorage } from './hooks/useStorage';
+import { getPendingReportMonth, useReportSubmissions } from './hooks/useReportSubmissions';
 import { useTimer } from './hooks/useTimer';
 import { useAuth } from './hooks/useAuth';
 import { useProfile } from './hooks/useProfile';
@@ -21,14 +25,25 @@ type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 function App() {
   const [activeTab, setActiveTab] = useState('home');
   const [authView, setAuthView] = useState<AuthView>('splash');
+  // Dismissing only quiets the report prompt for this visit - it is deliberately not
+  // persisted, so an unsent report is waiting again next time the app opens.
+  const [reportPromptDismissed, setReportPromptDismissed] = useState(false);
   const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings } = useStorage();
-  const { timerState, startTimer, pauseTimer, stopTimer } = useTimer();
+  const { timerState, startTimer, pauseTimer, stopTimer, setServiceType } = useTimer();
   const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
   const { profile, loading: profileLoading, createProfile, updateProfile, uploadAvatar, getDefaultTargets } = useProfile(user);
+  const { isSubmitted, markSubmitted, getCarryoverInto, trackingStartMonth } =
+    useReportSubmissions(user?.id);
 
-  // Register service worker for PWA
+  const pendingReportMonth = getPendingReportMonth(records, isSubmitted, trackingStartMonth);
+
+  // Register service worker for PWA (production only). In dev the SW would
+  // cache Vite's source modules and serve a stale, half-broken module graph,
+  // so instead we tear down any SW/caches a previous build left behind.
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
+    if (!('serviceWorker' in navigator)) return;
+
+    if (import.meta.env.PROD) {
       navigator.serviceWorker.register('/sw.js')
         .then(registration => {
           console.log('SW registered: ', registration);
@@ -36,7 +51,14 @@ function App() {
         .catch(registrationError => {
           console.log('SW registration failed: ', registrationError);
         });
+      return;
     }
+
+    navigator.serviceWorker.getRegistrations()
+      .then(registrations => Promise.all(registrations.map(r => r.unregister())))
+      .then(() => (typeof caches !== 'undefined' ? caches.keys() : []))
+      .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+      .catch(err => console.warn('SW cleanup failed:', err));
   }, []);
 
   // Update settings when profile changes (only for service types with requirements)
@@ -128,6 +150,7 @@ function App() {
       />
     );
   }
+// there should be an option to log hour credits (from ldc, theocratic schools, other assignments) in general per month
 
   const renderActiveTab = () => {
     switch (activeTab) {
@@ -141,12 +164,15 @@ function App() {
             onStartTimer={startTimer}
             onPauseTimer={pauseTimer}
             onStopTimer={stopTimer}
+            onSetServiceType={setServiceType}
           />
         );
       case 'home':
         return <HomeTab records={records} settings={settings} profile={profile} />;
       case 'calendar':
         return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
+      case 'stats':
+        return <StatsPage records={records} settings={settings} userId={user?.id} />;
       case 'students':
         return <StudentsTab />;
       case 'settings':
@@ -170,8 +196,22 @@ function App() {
       <div className="max-w-md mx-auto">
         {/* Main Content */}
         <main className="p-6 pt-8">
-          {renderActiveTab()}
+          {/* Keyed by tab so switching away from a broken screen clears the error */}
+          <ErrorBoundary key={activeTab} onReset={() => setActiveTab('home')}>
+            {renderActiveTab()}
+          </ErrorBoundary>
         </main>
+
+        {/* Last month's report still needs sending */}
+        {pendingReportMonth && !reportPromptDismissed && (
+          <MonthlyReportPrompt
+            monthKey={pendingReportMonth}
+            records={records}
+            carriedInMinutes={getCarryoverInto(pendingReportMonth)}
+            onCopied={markSubmitted}
+            onDismiss={() => setReportPromptDismissed(true)}
+          />
+        )}
 
         {/* Navigation with timer indicator */}
         <Navigation 

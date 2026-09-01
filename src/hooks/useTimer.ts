@@ -3,6 +3,19 @@ import { TimerState } from '../types';
 
 const TIMER_STORAGE_KEY = 'fieldService_timer';
 
+const DEFAULT_SERVICE_TYPE: TimerState['serviceType'] = 'h2h';
+
+// A stopped timer keeps the service type so the last choice stays selected
+// for the next session instead of snapping back to the default.
+const clearedState = (serviceType: TimerState['serviceType']): TimerState => ({
+  isRunning: false,
+  isPaused: false,
+  startTime: null,
+  pausedTime: 0,
+  totalTime: 0,
+  serviceType
+});
+
 export const useTimer = () => {
   const [timerState, setTimerState] = useState<TimerState>(() => {
     // Load timer state from localStorage on initialization
@@ -10,28 +23,26 @@ export const useTimer = () => {
     if (savedTimer) {
       try {
         const parsed = JSON.parse(savedTimer);
+        // State saved before serviceType existed has no type to restore
+        const serviceType: TimerState['serviceType'] =
+          parsed.serviceType === 'cart' ? 'cart' : DEFAULT_SERVICE_TYPE;
         // If timer was running, calculate current total time
         if (parsed.isRunning && !parsed.isPaused && parsed.startTime) {
           const now = Date.now();
           const elapsed = now - parsed.startTime + parsed.pausedTime;
           return {
             ...parsed,
+            serviceType,
             totalTime: elapsed
           };
         }
-        return parsed;
+        return { ...parsed, serviceType };
       } catch (error) {
         console.error('Error loading timer state:', error);
       }
     }
-    
-    return {
-      isRunning: false,
-      isPaused: false,
-      startTime: null,
-      pausedTime: 0,
-      totalTime: 0
-    };
+
+    return clearedState(DEFAULT_SERVICE_TYPE);
   });
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -78,11 +89,9 @@ export const useTimer = () => {
       } else {
         // Starting fresh
         return {
+          ...clearedState(prev.serviceType),
           isRunning: true,
-          isPaused: false,
-          startTime: now,
-          pausedTime: 0,
-          totalTime: 0
+          startTime: now
         };
       }
     });
@@ -96,28 +105,23 @@ export const useTimer = () => {
     }));
   };
 
+  // The service type belongs to the session, not to the Log tab, so it survives
+  // navigating away and back (which unmounts the tab) and a reload mid-session.
+  const setServiceType = (serviceType: TimerState['serviceType']) => {
+    setTimerState(prev => ({ ...prev, serviceType }));
+  };
+
   const stopTimer = () => {
     const finalTime = timerState.totalTime;
-    const newState = {
-      isRunning: false,
-      isPaused: false,
-      startTime: null,
-      pausedTime: 0,
-      totalTime: 0
-    };
+    const serviceType = timerState.serviceType;
+    const newState = clearedState(serviceType);
     setTimerState(newState);
     localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(newState));
-    return finalTime;
+    return { totalTime: finalTime, serviceType };
   };
 
   const resetTimer = () => {
-    const newState = {
-      isRunning: false,
-      isPaused: false,
-      startTime: null,
-      pausedTime: 0,
-      totalTime: 0
-    };
+    const newState = clearedState(timerState.serviceType);
     setTimerState(newState);
     localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(newState));
   };
@@ -127,6 +131,7 @@ export const useTimer = () => {
     startTimer,
     pauseTimer,
     stopTimer,
-    resetTimer
+    resetTimer,
+    setServiceType
   };
 };

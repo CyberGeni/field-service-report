@@ -16,6 +16,7 @@ interface CalendarTabProps {
 
 interface StudentVisitEntry {
   entryId: string;
+  visitId?: string;  // set when editing an existing DB visit
   studentId: string;
   notes: string;
   placeStopped: string;
@@ -46,10 +47,12 @@ const EntryModal: React.FC<EntryModalProps> = ({
   const [minutes, setMinutes] = useState('');
   const [notes, setNotes] = useState('');
   const [studentEntries, setStudentEntries] = useState<StudentVisitEntry[]>([]);
+  const [loadingVisits, setLoadingVisits] = useState(false);
+  const [removedVisitIds, setRemovedVisitIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [timeError, setTimeError] = useState(false);
   const { addToast } = useToast();
-  const { students, saveStudent, saveStudentVisit } = useStudents();
+  const { students, saveStudent, saveStudentVisit, updateStudentVisit, deleteStudentVisit, loadVisitsByDate } = useStudents();
 
   // Load time/notes for a given service type — does NOT touch student entries
   const loadFormForType = (type: 'h2h' | 'cart') => {
@@ -59,7 +62,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
     setNotes(existing?.notes || '');
   };
 
-  // Initialise on modal open only
+  // Initialise on modal open — load form fields and pre-populate existing student visits
   React.useEffect(() => {
     if (isOpen) {
       const hasH2H = existingRecords.some(r => r.type === 'h2h');
@@ -69,9 +72,27 @@ const EntryModal: React.FC<EntryModalProps> = ({
       const defaultType: 'h2h' | 'cart' = (hasCart && !hasH2H) ? 'cart' : 'h2h';
       setSelectedType(defaultType);
       loadFormForType(defaultType);
-      setStudentEntries([]);
       setSaving(false);
       setTimeError(false);
+      setRemovedVisitIds([]);
+
+      // Load any student visits already recorded for this date
+      setLoadingVisits(true);
+      loadVisitsByDate(selectedDate)
+        .then(visits => {
+          setStudentEntries(visits.map(v => ({
+            entryId: crypto.randomUUID(),
+            visitId: v.id,
+            studentId: v.student_id,
+            notes: v.notes || '',
+            placeStopped: v.place_stopped || '',
+            isNew: false,
+            newName: '',
+            newAddress: ''
+          })));
+        })
+        .catch(() => setStudentEntries([]))
+        .finally(() => setLoadingVisits(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -91,7 +112,13 @@ const EntryModal: React.FC<EntryModalProps> = ({
   };
 
   const removeStudentEntry = (entryId: string) => {
-    setStudentEntries(prev => prev.filter(e => e.entryId !== entryId));
+    setStudentEntries(prev => {
+      const entry = prev.find(e => e.entryId === entryId);
+      if (entry?.visitId) {
+        setRemovedVisitIds(ids => [...ids, entry.visitId!]);
+      }
+      return prev.filter(e => e.entryId !== entryId);
+    });
   };
 
   const updateStudentEntry = (entryId: string, updates: Partial<StudentVisitEntry>) => {
@@ -144,7 +171,18 @@ const EntryModal: React.FC<EntryModalProps> = ({
       };
       await onSave(record);
 
-      // Save each student visit (silently — we show one summary toast below)
+      // Delete any visits the user removed from the list
+      for (const visitId of removedVisitIds) {
+        try {
+          await deleteStudentVisit(visitId, { silent: true });
+        } catch (err) {
+          console.error('Failed to delete student visit:', err);
+        }
+      }
+
+      // Save or update student visits (silently — one summary toast below)
+      let newVisitCount = 0;
+      let updatedVisitCount = 0;
       for (const entry of validEntries) {
         try {
           let studentId = entry.studentId;
@@ -165,22 +203,39 @@ const EntryModal: React.FC<EntryModalProps> = ({
 
           if (!studentId) continue;
 
-          await saveStudentVisit({
-            student_id: studentId,
-            visit_date: selectedDate,
-            place_stopped: entry.placeStopped.trim() || undefined,
-            notes: entry.notes.trim() || undefined
-          }, { silent: true });
+          if (entry.visitId) {
+            // Update existing visit record
+            await updateStudentVisit(entry.visitId, {
+              place_stopped: entry.placeStopped.trim() || undefined,
+              notes: entry.notes.trim() || undefined
+            }, { silent: true });
+            updatedVisitCount++;
+          } else {
+            // New visit
+            await saveStudentVisit({
+              student_id: studentId,
+              visit_date: selectedDate,
+              place_stopped: entry.placeStopped.trim() || undefined,
+              notes: entry.notes.trim() || undefined
+            }, { silent: true });
+            newVisitCount++;
+          }
         } catch (err) {
           console.error('Failed to save student visit:', err);
         }
       }
 
-      const studentCount = validEntries.length;
+      // Build a concise summary of what happened with student visits
+      const studentParts: string[] = [];
+      if (newVisitCount > 0) studentParts.push(`${newVisitCount} visit${newVisitCount > 1 ? 's' : ''} recorded`);
+      if (updatedVisitCount > 0) studentParts.push(`${updatedVisitCount} updated`);
+      if (removedVisitIds.length > 0) studentParts.push(`${removedVisitIds.length} removed`);
+      const studentSummary = studentParts.length > 0 ? ` · ${studentParts.join(', ')}` : '';
+
       addToast({
         type: 'success',
         title: existingRecord ? 'Entry Updated' : 'Entry Added',
-        description: `${hoursNum}h ${minutesNum}m logged${studentCount > 0 ? ` · ${studentCount} student visit${studentCount > 1 ? 's' : ''} recorded` : ''}`
+        description: `${hoursNum}h ${minutesNum}m logged${studentSummary}`
       });
 
       onClose();
@@ -318,7 +373,12 @@ const EntryModal: React.FC<EntryModalProps> = ({
                 </button>
               </div>
 
-              {studentEntries.length === 0 ? (
+              {loadingVisits ? (
+                <div className="flex items-center justify-center space-x-2 py-4 text-gray-400">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-sm">Loading visits…</span>
+                </div>
+              ) : studentEntries.length === 0 ? (
                 <button type="button" onClick={addStudentEntry} disabled={saving}
                   className="w-full border-2 border-dashed border-gray-300 hover:border-blue-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl p-4 text-gray-400 hover:text-blue-600 transition-colors flex items-center justify-center space-x-2 text-sm">
                   <User size={16} />
@@ -330,15 +390,19 @@ const EntryModal: React.FC<EntryModalProps> = ({
                     <div key={entry.entryId} className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
                       {/* Entry header */}
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-blue-800">Student {idx + 1}</span>
+                        <span className="text-sm font-semibold text-blue-800">
+                          {entry.visitId && entry.studentId
+                            ? (students.find(s => s.id === entry.studentId)?.name ?? `Student ${idx + 1}`)
+                            : `Student ${idx + 1}`}
+                        </span>
                         <button onClick={() => removeStudentEntry(entry.entryId)} disabled={saving}
                           className="p-1 text-blue-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors">
                           <X size={16} />
                         </button>
                       </div>
 
-                      {/* Student picker */}
-                      {!entry.isNew ? (
+                      {/* Student picker — hidden for existing visits (student identity is fixed) */}
+                      {!entry.visitId && !entry.isNew ? (
                         <div className="space-y-2">
                           <select value={entry.studentId}
                             onChange={e => updateStudentEntry(entry.entryId, { studentId: e.target.value })}
@@ -357,7 +421,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
                             <span>Create new student instead</span>
                           </button>
                         </div>
-                      ) : (
+                      ) : !entry.visitId ? (
                         <div className="space-y-2">
                           <input type="text" value={entry.newName} placeholder="Student's name *"
                             onChange={e => updateStudentEntry(entry.entryId, { newName: e.target.value })}
@@ -374,7 +438,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
                             <span>← Select existing student instead</span>
                           </button>
                         </div>
-                      )}
+                      ) : null}
 
                       {/* Where we stopped */}
                       <div>

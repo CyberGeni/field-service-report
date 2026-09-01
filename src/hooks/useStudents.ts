@@ -309,7 +309,28 @@ export const useStudents = () => {
     }
   };
 
-  const updateStudentVisit = async (id: string, updates: Partial<Omit<StudentVisit, 'id' | 'user_id' | 'student_id' | 'created_at' | 'updated_at'>>) => {
+  const loadVisitsByDate = async (date: string): Promise<StudentVisit[]> => {
+    if (!user) return [];
+    try {
+      const { data, error } = await supabase
+        .from('student_visits')
+        .select('*')
+        .eq('visit_date', date)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    } catch (err: any) {
+      console.error('Error loading visits by date:', err);
+      return [];
+    }
+  };
+
+  const updateStudentVisit = async (
+    id: string,
+    updates: Partial<Omit<StudentVisit, 'id' | 'user_id' | 'student_id' | 'created_at' | 'updated_at'>>,
+    options: { silent?: boolean } = {}
+  ) => {
     if (!user) {
       throw new Error('User not authenticated');
     }
@@ -342,11 +363,13 @@ export const useStudents = () => {
 
       console.log('Student visit updated successfully:', data);
 
-      addToast({
-        type: 'success',
-        title: 'Visit Updated',
-        description: 'Student visit has been updated successfully'
-      });
+      if (!options.silent) {
+        addToast({
+          type: 'success',
+          title: 'Visit Updated',
+          description: 'Student visit has been updated successfully'
+        });
+      }
 
       return data;
 
@@ -361,7 +384,7 @@ export const useStudents = () => {
     }
   };
 
-  const deleteStudentVisit = async (id: string) => {
+  const deleteStudentVisit = async (id: string, options: { silent?: boolean } = {}) => {
     if (!user) {
       throw new Error('User not authenticated');
     }
@@ -379,11 +402,13 @@ export const useStudents = () => {
 
       console.log('Student visit deleted successfully');
 
-      addToast({
-        type: 'success',
-        title: 'Visit Deleted',
-        description: 'Student visit has been deleted successfully'
-      });
+      if (!options.silent) {
+        addToast({
+          type: 'success',
+          title: 'Visit Deleted',
+          description: 'Student visit has been deleted successfully'
+        });
+      }
 
     } catch (err: any) {
       console.error('Error deleting student visit:', err);
@@ -404,6 +429,7 @@ export const useStudents = () => {
     updateStudent,
     deleteStudent,
     loadStudentVisits,
+    loadVisitsByDate,
     saveStudentVisit,
     updateStudentVisit,
     deleteStudentVisit,
