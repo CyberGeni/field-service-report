@@ -3,6 +3,15 @@ import { ServiceRecord, Settings, FieldServiceDay } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
+import { useOnlineStatus } from './useOnlineStatus';
+import { readCache, writeCache } from '../utils/offlineCache';
+import { enqueueOperation, flushOutbox, readOutbox } from '../utils/offlineSync';
+
+const RECORDS_CACHE = 'records';
+const SETTINGS_CACHE = 'settings';
+
+const sortByDateDescending = (records: ServiceRecord[]): ServiceRecord[] =>
+  [...records].sort((a, b) => b.date.localeCompare(a.date));
 
 // Dynamically calculate the current JW service year start (September of the appropriate year)
 const getDefaultServiceYearStart = (): string => {
@@ -30,9 +39,17 @@ export const useStorage = () => {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Changes made on this device that Supabase has not accepted yet
+  const [pendingChanges, setPendingChanges] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const online = useOnlineStatus();
   const { user } = useAuth();
   const { addToast } = useToast();
   const loadingRef = useRef(false);
+  // updateSettings can be called from an effect that captured an older render, and a
+  // partial update must never fold the user's saved days back into the defaults.
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const settingsLoadedRef = useRef(false);
   const initialLoadCompleteRef = useRef(false);
 
@@ -153,11 +170,51 @@ export const useStorage = () => {
     };
   };
 
+  /** Keep the device's copy in step with what the user is looking at. */
+  const cacheRecords = (userId: string, next: ServiceRecord[]) => {
+    writeCache(RECORDS_CACHE, userId, next);
+  };
+
+  /**
+   * Send anything logged offline, then say how much is still waiting.
+   *
+   * Called before every read: pulling the server's version over the top of unsent
+   * work would quietly undo whatever the user did without a signal.
+   */
+  const syncPendingChanges = async (userId: string): Promise<boolean> => {
+    if (readOutbox(userId).length === 0) return true;
+
+    setSyncing(true);
+    try {
+      const result = await flushOutbox(userId);
+      setPendingChanges(result.pending);
+      return !result.failed;
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const loadData = async () => {
     if (!user || loadingRef.current) {
       console.log('⏭️ Skipping load - no user or already loading');
       return;
     }
+
+    // Show the device's copy straight away: the app has to be usable before - and
+    // whether or not - the network answers.
+    const cachedRecords = readCache<ServiceRecord[]>(RECORDS_CACHE, user.id);
+    if (cachedRecords) {
+      setRecords(sortByDateDescending(cachedRecords));
+      setLoading(false);
+    }
+
+    const cachedSettings = readCache<Settings>(SETTINGS_CACHE, user.id);
+    if (cachedSettings) {
+      setSettings(cachedSettings);
+      settingsLoadedRef.current = true;
+    }
+
+    setPendingChanges(readOutbox(user.id).length);
 
     try {
       loadingRef.current = true;
@@ -165,6 +222,13 @@ export const useStorage = () => {
       setError(null);
 
       console.log('📥 Loading data for user:', user.id);
+
+      // Unsent work goes up before anything comes down
+      const synced = await syncPendingChanges(user.id);
+      if (!synced) {
+        console.log('📴 Still offline - keeping the local copy');
+        return;
+      }
 
       // Load service records
       const { data: recordsData, error: recordsError } = await supabase
@@ -186,6 +250,7 @@ export const useStorage = () => {
       }));
 
       setRecords(transformedRecords);
+      cacheRecords(user.id, transformedRecords);
       console.log('✅ Loaded', transformedRecords.length, 'service records');
 
       // Load user settings - this is the critical part
@@ -193,7 +258,8 @@ export const useStorage = () => {
 
     } catch (err: any) {
       console.error('❌ Error loading data:', err);
-      setError(err.message);
+      // A failed refresh is only an error when there is nothing to fall back on
+      if (!cachedRecords) setError(err.message);
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -223,6 +289,7 @@ export const useStorage = () => {
         const loadedSettings = parseSettingsFromDatabase(settingsData);
         console.log('🎯 Parsed settings:', loadedSettings);
         setSettings(loadedSettings);
+        writeCache(SETTINGS_CACHE, user.id, loadedSettings);
         settingsLoadedRef.current = true;
       } else {
         console.log('❌ No settings found in database');
@@ -311,126 +378,76 @@ export const useStorage = () => {
     }
   };
 
-  const mergeRecordsForDate = async (date: string, newRecord: ServiceRecord) => {
-    if (!user) {
-      throw new Error('User not authenticated');
-    }
+  /**
+   * Fold a new entry into whatever is already logged for that day and service type.
+   *
+   * The device's own copy is the input, not a fresh query: it is the same data, it is
+   * there when the network is not, and it keeps one day's total in one row.
+   */
+  const mergeRecordsForDate = (newRecord: ServiceRecord): ServiceRecord => {
+    const sameSlot = records.filter(
+      record => record.date === newRecord.date && record.type === newRecord.type
+    );
 
-    // Get all existing records for this date and service type
-    const { data: existingRecords, error: fetchError } = await supabase
-      .from('service_records')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('date', date)
-      .eq('type', newRecord.type);
+    const totalMinutes = sameSlot.reduce(
+      (total, record) => total + record.hours * 60 + record.minutes,
+      newRecord.hours * 60 + newRecord.minutes
+    );
 
-    if (fetchError) throw fetchError;
-
-    // Calculate total time including the new record
-    let totalMinutes = newRecord.hours * 60 + newRecord.minutes;
-    let combinedNotes = newRecord.notes ? [newRecord.notes] : [];
-
-    // Add existing records' time and notes
-    existingRecords?.forEach(record => {
-      totalMinutes += record.hours * 60 + record.minutes;
-      if (record.notes && record.notes.trim()) {
-        combinedNotes.push(record.notes.trim());
-      }
-    });
-
-    const finalHours = Math.floor(totalMinutes / 60);
-    const finalMinutes = totalMinutes % 60;
-    const finalNotes = combinedNotes.length > 0 ? combinedNotes.join('; ') : undefined;
-
-    // Delete all existing records for this date and type
-    if (existingRecords && existingRecords.length > 0) {
-      const { error: deleteError } = await supabase
-        .from('service_records')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('date', date)
-        .eq('type', newRecord.type);
-
-      if (deleteError) throw deleteError;
-    }
-
-    // Insert the merged record
-    const mergedRecord = {
-      id: newRecord.id,
-      user_id: user.id,
-      date: date,
-      hours: finalHours,
-      minutes: finalMinutes,
-      type: newRecord.type,
-      notes: finalNotes || null
-    };
-
-    const { error: insertError } = await supabase
-      .from('service_records')
-      .insert(mergedRecord);
-
-    if (insertError) throw insertError;
+    const notes = [newRecord.notes, ...sameSlot.map(record => record.notes)]
+      .map(note => note?.trim())
+      .filter((note): note is string => Boolean(note));
 
     return {
       id: newRecord.id,
-      date: date,
-      hours: finalHours,
-      minutes: finalMinutes,
+      date: newRecord.date,
+      hours: Math.floor(totalMinutes / 60),
+      minutes: totalMinutes % 60,
       type: newRecord.type,
-      notes: finalNotes
+      notes: notes.length > 0 ? notes.join('; ') : undefined
     };
   };
 
+  /**
+   * Save a record on the device first, then send it.
+   *
+   * The user is standing in a doorway when they log this - it has to land instantly
+   * and survive a dead connection, so the local copy is the commit and the upload is
+   * a queued consequence of it.
+   */
   const saveRecord = async (record: ServiceRecord) => {
     if (!user) {
       setError('User not authenticated');
       return;
     }
 
-    try {
-      setError(null);
+    setError(null);
 
-      // Check if this is an update to an existing record
-      const existingRecord = records.find(r => r.id === record.id);
-      
-      if (existingRecord) {
-        // This is an edit - replace the existing record
-        const { error } = await supabase
-          .from('service_records')
-          .update({
-            date: record.date,
-            hours: record.hours,
-            minutes: record.minutes,
-            type: record.type,
-            notes: record.notes || null
-          })
-          .eq('id', record.id)
-          .eq('user_id', user.id);
+    const isEdit = records.some(existing => existing.id === record.id);
+    const merged = isEdit ? record : mergeRecordsForDate(record);
 
-        if (error) throw error;
+    const nextRecords = sortByDateDescending(
+      isEdit
+        ? records.map(existing => (existing.id === record.id ? merged : existing))
+        : [
+            ...records.filter(
+              existing => !(existing.date === record.date && existing.type === record.type)
+            ),
+            merged
+          ]
+    );
 
-        // Update local state
-        const updatedRecords = records.map(r => r.id === record.id ? record : r)
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setRecords(updatedRecords);
-      } else {
-        // This is a new record - merge with existing records for the same date and type
-        const mergedRecord = await mergeRecordsForDate(record.date, record);
+    setRecords(nextRecords);
+    cacheRecords(user.id, nextRecords);
 
-        // Update local state - remove any existing records for this date/type and add the merged one
-        const updatedRecords = [
-          ...records.filter(r => !(r.date === record.date && r.type === record.type)),
-          mergedRecord
-        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        setRecords(updatedRecords);
-      }
+    const queued = enqueueOperation(user.id, {
+      kind: isEdit ? 'upsertRecord' : 'replaceDay',
+      record: merged
+    });
+    setPendingChanges(queued.length);
 
-    } catch (err: any) {
-      console.error('❌ Error saving record:', err);
-      setError(err.message);
-      throw err; // Re-throw to allow UI to handle the error
-    }
+    // Best effort: a failure here is not the user's problem, it just waits in the queue
+    await syncPendingChanges(user.id);
   };
 
   const deleteRecord = async (id: string) => {
@@ -439,26 +456,16 @@ export const useStorage = () => {
       return;
     }
 
-    try {
-      setError(null);
+    setError(null);
 
-      const { error } = await supabase
-        .from('service_records')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user.id);
+    const nextRecords = records.filter(record => record.id !== id);
+    setRecords(nextRecords);
+    cacheRecords(user.id, nextRecords);
 
-      if (error) throw error;
+    const queued = enqueueOperation(user.id, { kind: 'deleteRecord', recordId: id });
+    setPendingChanges(queued.length);
 
-      // Update local state
-      const updatedRecords = records.filter(r => r.id !== id);
-      setRecords(updatedRecords);
-
-    } catch (err: any) {
-      console.error('❌ Error deleting record:', err);
-      setError(err.message);
-      throw err; // Re-throw to allow UI to handle the error
-    }
+    await syncPendingChanges(user.id);
   };
 
   const updateSettings = async (newSettings: Partial<Settings>) => {
@@ -467,56 +474,53 @@ export const useStorage = () => {
       return;
     }
 
-    try {
-      setError(null);
+    setError(null);
 
-      const updatedSettings = { ...settings, ...newSettings };
+    const updatedSettings = { ...settingsRef.current, ...newSettings };
 
-      // Prepare the update data - ensure field service days are properly formatted
-      const updateData: any = {
-        user_id: user.id,
-        monthly_target: updatedSettings.monthlyTarget,
-        yearly_target: updatedSettings.yearlyTarget,
-        field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
-        field_service_days_config: updatedSettings.fieldServiceDays, // New format with full structure
-        service_year_start: updatedSettings.serviceYearStart
-      };
+    // Prepare the update data - ensure field service days are properly formatted
+    const updateData: Record<string, unknown> = {
+      user_id: user.id,
+      monthly_target: updatedSettings.monthlyTarget,
+      yearly_target: updatedSettings.yearlyTarget,
+      field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
+      field_service_days_config: updatedSettings.fieldServiceDays, // New format with full structure
+      service_year_start: updatedSettings.serviceYearStart
+    };
 
-      console.log('💾 Updating settings with data:', updateData);
+    // Settings apply on the device immediately and upload behind the user, so the
+    // targets and service days still hold on a screen opened with no signal.
+    setSettings(updatedSettings);
+    writeCache(SETTINGS_CACHE, user.id, updatedSettings);
+    settingsLoadedRef.current = true;
 
-      // Use upsert to handle both insert and update cases
-      const { data, error } = await supabase
-        .from('user_settings')
-        .upsert(updateData, {
-          onConflict: 'user_id'
-        })
-        .select()
-        .single();
+    const queued = enqueueOperation(user.id, { kind: 'saveSettings', row: updateData });
+    setPendingChanges(queued.length);
 
-      if (error) {
-        console.error('❌ Database error:', error);
-        throw error;
-      }
-
-      console.log('✅ Settings updated successfully in database:', data);
-
-      // Update local state only after successful database update
-      setSettings(updatedSettings);
-      settingsLoadedRef.current = true;
-      console.log('🎯 Local settings updated:', updatedSettings);
-
-    } catch (err: any) {
-      console.error('❌ Error updating settings:', err);
-      setError(err.message);
-      throw err; // Re-throw to allow UI to handle the error
-    }
+    await syncPendingChanges(user.id);
   };
+
+  // Coming back online is the moment to hand over whatever was logged without it
+  useEffect(() => {
+    if (!user || !online) return;
+
+    const catchUp = async () => {
+      if (await syncPendingChanges(user.id)) {
+        loadData();
+      }
+    };
+
+    catchUp();
+  }, [online, user]);
 
   return {
     records,
     settings,
     loading,
     error,
+    online,
+    syncing,
+    pendingChanges,
     saveRecord,
     deleteRecord,
     updateSettings,

@@ -3,12 +3,43 @@ import { Student, StudentVisit } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
+import { readCache, writeCache } from '../utils/offlineCache';
+
+const STUDENTS_CACHE = 'students';
+
+// Three components mount this hook at once (the tab, its detail sheet, the calendar).
+// Without a shared load they each hit the network - and each raised its own "failed to
+// load" toast when the network was not there.
+let inFlight: { userId: string; request: Promise<Student[]> } | null = null;
+
+const fetchStudents = (userId: string): Promise<Student[]> => {
+  if (inFlight?.userId === userId) return inFlight.request;
+
+  const request = supabase
+    .from('students')
+    .select('*')
+    .eq('user_id', userId)
+    .order('name', { ascending: true })
+    .then(({ data, error }) => {
+      if (error) throw error;
+      return (data || []) as Student[];
+    })
+    .finally(() => {
+      if (inFlight?.userId === userId) inFlight = null;
+    });
+
+  inFlight = { userId, request };
+  return request;
+};
 
 export const useStudents = () => {
-  const [students, setStudents] = useState<Student[]>([]);
+  // Start from the device's copy so the list is there with no signal, before any fetch
+  const { user } = useAuth();
+  const [students, setStudents] = useState<Student[]>(
+    () => (user ? readCache<Student[]>(STUDENTS_CACHE, user.id) : null) || []
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user } = useAuth();
   const { addToast } = useToast();
 
   // Load students when user changes
@@ -24,25 +55,30 @@ export const useStudents = () => {
   const loadStudents = async () => {
     if (!user) return;
 
+    const cached = readCache<Student[]>(STUDENTS_CACHE, user.id);
+    if (cached) {
+      setStudents(cached);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
       setError(null);
 
-      console.log('Loading students for user:', user.id);
+      const studentsData = await fetchStudents(user.id);
 
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name', { ascending: true });
-
-      if (studentsError) throw studentsError;
-
-      console.log('Loaded', studentsData?.length || 0, 'students');
-      setStudents(studentsData || []);
-
+      console.log('Loaded', studentsData.length, 'students');
+      setStudents(studentsData);
+      writeCache(STUDENTS_CACHE, user.id, studentsData);
     } catch (err: any) {
       console.error('Error loading students:', err);
+
+      // Offline is a state, not a failure: the list on screen is the last one synced,
+      // and shouting about it once per mounted component helps nobody.
+      if (cached || !navigator.onLine) {
+        setError(null);
+        return;
+      }
+
       setError(err.message);
       addToast({
         type: 'error',
@@ -118,7 +154,11 @@ export const useStudents = () => {
       console.log('Student saved successfully:', data);
 
       // Update local state
-      setStudents(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setStudents(prev => {
+        const next = [...prev, data].sort((a, b) => a.name.localeCompare(b.name));
+        if (user) writeCache(STUDENTS_CACHE, user.id, next);
+        return next;
+      });
 
       addToast({
         type: 'success',
@@ -183,10 +223,13 @@ export const useStudents = () => {
       console.log('Student updated successfully:', data);
 
       // Update local state
-      setStudents(prev => 
-        prev.map(student => student.id === id ? data : student)
-          .sort((a, b) => a.name.localeCompare(b.name))
-      );
+      setStudents(prev => {
+        const next = prev
+          .map(student => (student.id === id ? data : student))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        if (user) writeCache(STUDENTS_CACHE, user.id, next);
+        return next;
+      });
 
       addToast({
         type: 'success',
@@ -235,7 +278,11 @@ export const useStudents = () => {
       console.log('Student deleted successfully');
 
       // Update local state
-      setStudents(prev => prev.filter(student => student.id !== id));
+      setStudents(prev => {
+        const next = prev.filter(student => student.id !== id);
+        if (user) writeCache(STUDENTS_CACHE, user.id, next);
+        return next;
+      });
 
       addToast({
         type: 'success',

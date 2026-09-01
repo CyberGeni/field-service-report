@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { ServiceRecord } from '../types';
 import { addMonths, getCurrentMonth } from '../utils/dateUtils';
 import { MINUTES_PER_HOUR, ReportRounding } from '../utils/reportRounding';
+import { enqueueOperation } from '../utils/offlineSync';
 
 export interface ReportSubmission {
   copiedAt: string; // ISO timestamp of the copy that settled the month
@@ -297,11 +298,19 @@ export const useReportSubmissions = (userId?: string) => {
       };
       emit();
 
+      // A report copied on a doorstep still counts; the row follows when there is a
+      // connection to carry it.
       const { error } = await supabase
         .from('report_submissions')
         .upsert(toRow(userId, monthKey, entry), { onConflict: 'user_id,month' });
 
-      if (error) console.error('Could not save report submission:', error);
+      if (error) {
+        console.error('Could not save report submission, queueing it:', error);
+        enqueueOperation(userId, {
+          kind: 'saveReportSubmission',
+          row: toRow(userId, monthKey, entry)
+        });
+      }
     },
     [userId]
   );
@@ -322,7 +331,10 @@ export const useReportSubmissions = (userId?: string) => {
         .eq('user_id', userId)
         .eq('month', monthKey);
 
-      if (error) console.error('Could not clear report submission:', error);
+      if (error) {
+        console.error('Could not clear report submission, queueing it:', error);
+        enqueueOperation(userId, { kind: 'deleteReportSubmission', month: monthKey });
+      }
     },
     [userId]
   );

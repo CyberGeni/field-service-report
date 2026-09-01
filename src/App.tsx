@@ -8,6 +8,7 @@ import StatsPage from './components/StatsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import SettingsTab from './components/SettingsTab';
 import MonthlyReportPrompt from './components/MonthlyReportPrompt';
+import SyncStatusBanner from './components/SyncStatusBanner';
 import SplashScreen from './components/auth/SplashScreen';
 import SignInForm from './components/auth/SignInForm';
 import SignUpForm from './components/auth/SignUpForm';
@@ -28,7 +29,17 @@ function App() {
   // Dismissing only quiets the report prompt for this visit - it is deliberately not
   // persisted, so an unsent report is waiting again next time the app opens.
   const [reportPromptDismissed, setReportPromptDismissed] = useState(false);
-  const { records, settings, loading: storageLoading, saveRecord, deleteRecord, updateSettings } = useStorage();
+  const {
+    records,
+    settings,
+    loading: storageLoading,
+    online,
+    syncing,
+    pendingChanges,
+    saveRecord,
+    deleteRecord,
+    updateSettings
+  } = useStorage();
   const { timerState, startTimer, pauseTimer, stopTimer, setServiceType } = useTimer();
   const { user, loading: authLoading, signIn, signUp, signOut, resetPassword } = useAuth();
   const { profile, loading: profileLoading, createProfile, updateProfile, uploadAvatar, getDefaultTargets } = useProfile(user);
@@ -63,6 +74,11 @@ function App() {
 
   // Update settings when profile changes (only for service types with requirements)
   useEffect(() => {
+    // Never before the user's own settings have loaded: applying a service type's
+    // default targets to the placeholder settings would write the default field
+    // service days over whatever they had actually saved.
+    if (storageLoading) return;
+
     if (profile && profile.service_type && hasHourRequirement(profile.service_type)) {
       const defaultTargets = getDefaultTargets(profile.service_type);
       // Only update if current targets match old defaults (haven't been customized)
@@ -73,7 +89,7 @@ function App() {
         });
       }
     }
-  }, [profile?.service_type]);
+  }, [profile?.service_type, storageLoading]);
 
   // Show loading screen while checking auth or loading data
   if (authLoading || (user && (profileLoading || storageLoading))) {
@@ -196,6 +212,8 @@ function App() {
       <div className="max-w-md mx-auto">
         {/* Main Content */}
         <main className="p-6 pt-8">
+          <SyncStatusBanner online={online} syncing={syncing} pendingChanges={pendingChanges} />
+
           {/* Keyed by tab so switching away from a broken screen clears the error */}
           <ErrorBoundary key={activeTab} onReset={() => setActiveTab('home')}>
             {renderActiveTab()}

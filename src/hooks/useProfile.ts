@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { clearCache, readCache, writeCache } from '../utils/offlineCache'
+
+const PROFILE_CACHE = 'profile'
 
 export interface Profile {
   id: string
@@ -28,6 +31,14 @@ export function useProfile(user: any) {
 
       console.log('Fetching profile for user:', user.id)
 
+      // Without this the app would offer profile setup to an established user the
+      // moment they open it with no signal, and overwrite what they already have.
+      const cached = readCache<Profile>(PROFILE_CACHE, user.id)
+      if (cached) {
+        setProfile(cached)
+        setLoading(false)
+      }
+
       const { data, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
@@ -39,7 +50,8 @@ export function useProfile(user: any) {
           // No profile found - this is expected for new users
           console.log('No profile found for user:', user.id)
           setProfile(null)
-        } else {
+          clearCache(PROFILE_CACHE, user.id)
+        } else if (!cached) {
           console.error('Error fetching profile:', fetchError)
           setError(fetchError.message)
         }
@@ -48,9 +60,13 @@ export function useProfile(user: any) {
 
       console.log('Profile fetched successfully:', data)
       setProfile(data)
+      writeCache(PROFILE_CACHE, user.id, data)
     } catch (err) {
       console.error('Unexpected error fetching profile:', err)
-      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      // A cached profile is a working session; only a first run has nothing to show
+      if (!readCache<Profile>(PROFILE_CACHE, user.id)) {
+        setError(err instanceof Error ? err.message : 'An unexpected error occurred')
+      }
     } finally {
       setLoading(false)
     }
@@ -82,6 +98,7 @@ export function useProfile(user: any) {
 
       console.log('Profile created successfully:', data)
       setProfile(data)
+      writeCache(PROFILE_CACHE, user.id, data)
       return data
     } catch (err) {
       console.error('Error creating profile:', err)
@@ -111,6 +128,7 @@ export function useProfile(user: any) {
 
       console.log('Profile updated successfully:', data)
       setProfile(data)
+      writeCache(PROFILE_CACHE, user.id, data)
       return data
     } catch (err) {
       console.error('Error updating profile:', err)

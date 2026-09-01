@@ -546,6 +546,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [imageKey, setImageKey] = useState(0); // Force re-render of image
   const { addToast } = useToast();
 
+  // Follow the stored settings: they change under this screen when a sync lands or
+  // another device saves, and a snapshot taken on mount would save stale days back.
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
   // Update image key when profile avatar changes
   useEffect(() => {
     setImageKey(prev => prev + 1);
