@@ -3,6 +3,7 @@ import { AuthError } from '@supabase/supabase-js';
 import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, CheckCircle, HardHat } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
+import { isPriorityFieldDay } from '../utils/dateUtils';
 import { getErrorMessage } from '../utils/errors';
 import { useToast } from './ui/toast';
 
@@ -216,6 +217,24 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
                 className="w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+
+            {/* Which days the plan leans on first when the month needs less than
+                every day can give */}
+            <label className="flex items-start space-x-3 p-3 bg-gray-50 rounded-xl border border-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPriorityFieldDay(localDay)}
+                onChange={(e) => setLocalDay(prev => ({ ...prev, isPriority: e.target.checked }))}
+                className="mt-0.5 w-4 h-4 text-purple-600 rounded focus:ring-2 focus:ring-purple-500"
+              />
+              <span>
+                <span className="block text-sm font-medium text-gray-700">Priority day</span>
+                <span className="block text-xs text-gray-500">
+                  Filled first when planning. Days that are not priority are only used when the priority days
+                  cannot reach the month's target on their own.
+                </span>
+              </span>
+            </label>
           </div>
 
           {/* Actions */}
@@ -869,9 +888,16 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             {localSettings.fieldServiceDays.map((fieldDay, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800">
-                    {dayNames[fieldDay.day]}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <p className="font-medium text-gray-800">
+                      {dayNames[fieldDay.day]}
+                    </p>
+                    {isPriorityFieldDay(fieldDay) && (
+                      <span className="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                        Priority
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-600">
                     {fieldDay.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'} • {fieldDay.potentialHours}h
                   </p>
@@ -905,7 +931,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <div className="text-center py-8 text-gray-500">
             <Calendar size={48} className="mx-auto mb-4 opacity-50" />
             <p className="font-medium">No field service days configured</p>
-            <p className="text-sm">Add your typical field service days to get scheduling suggestions</p>
+            <p className="text-sm">Add the days you go out, and how long you have on each, to get a plan for the month</p>
           </div>
         )}
       </div>

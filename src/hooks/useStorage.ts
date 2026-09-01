@@ -22,6 +22,7 @@ interface FieldServiceDayRow {
   potentialHours?: number;
   potential_hours?: number;
   label?: string;
+  isPriority?: boolean;
 }
 
 interface SettingsRow {
@@ -136,7 +137,10 @@ export const useStorage = () => {
           day: fsd.day,
           type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type as FieldServiceDay['type'], // Convert old format
           potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
-          label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
+          label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`,
+          // Left undefined on a day saved before priority existed, which the planner
+          // reads as "follow the type" rather than as "not a priority"
+          isPriority: fsd.isPriority
         }));
         console.log('✅ Using field_service_days_config:', fieldServiceDays);
       } catch (e) {

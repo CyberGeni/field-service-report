@@ -57,6 +57,15 @@ export const isFieldServiceDay = (date: Date, fieldServiceDays: FieldServiceDay[
 };
 
 /**
+ * Whether a field day is one to fill before the others.
+ *
+ * A day saved before priority existed carries no flag, so the type stands in for
+ * one: house to house is the work being planned around, cart is the fallback.
+ */
+export const isPriorityFieldDay = (fieldServiceDay: FieldServiceDay): boolean =>
+  fieldServiceDay.isPriority ?? fieldServiceDay.type === 'h2h';
+
+/**
  * A calendar date as YYYY-MM-DD, read in the user's own timezone.
  *
  * Built from the local parts rather than via toISOString: west of UTC an evening in

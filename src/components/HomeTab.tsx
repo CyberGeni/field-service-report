@@ -1,8 +1,8 @@
 import React from 'react';
 import { Calendar } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
-import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getProgressBarColor, generateFieldServiceSuggestions } from '../utils/calculations';
-import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort, isFieldServiceDay } from '../utils/dateUtils';
+import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getProgressBarColor, generateFieldServicePlan } from '../utils/calculations';
+import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort, getDateString } from '../utils/dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from '../utils/serviceTypes';
 import { ACTIVITY_META } from '../utils/activityTypes';
 import CircularProgress from './CircularProgress';
@@ -17,7 +17,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
   const currentMonth = getCurrentMonth();
   const monthlyStats = calculateMonthlyStats(records, settings, currentMonth, profile);
   const yearlyStats = calculateYearlyStats(records, settings, profile);
-  const suggestions = generateFieldServiceSuggestions(records, settings, currentMonth);
+  const plan = generateFieldServicePlan(records, settings, currentMonth, profile);
   
   const monthProgress = getProgressPercentage(monthlyStats.totalHours, monthlyStats.targetHours);
   const yearProgress = getProgressPercentage(yearlyStats.totalHours, yearlyStats.targetHours);
@@ -41,25 +41,13 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     });
   };
 
-  // Calculate daily target based on actual monthly target needed
-  const getDailyTarget = () => {
-    const today = new Date();
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-    const currentDay = today.getDate();
-    const daysRemaining = Math.max(1, daysInMonth - currentDay + 1);
-    
-    // Calculate how many hours are needed for the rest of the month
-    const hoursRemaining = Math.max(0, monthlyStats.targetHours - monthlyStats.totalHours);
-    const dailyHours = hoursRemaining / daysRemaining;
-    
-    return formatHoursMinutesShort(dailyHours);
-  };
-
   const timeOfDay = getTimeOfDayGreeting();
   const todaysDate = getTodaysDate();
-  const dailyTarget = getDailyTarget();
   const displayName = profile?.name || settings.username || 'Friend';
-  const todayIsFieldDay = isFieldServiceDay(new Date(), settings.fieldServiceDays);
+
+  // The plan is chronological, so the first day left in it is the next one to go out on
+  const nextPlannedDay = plan.days[0];
+  const nextPlannedIsToday = nextPlannedDay?.date === getDateString(new Date());
 
   // Determine progress bar color based on progress
   const getProgressColor = (progress: number) => {
@@ -123,17 +111,8 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     );
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-50 border-red-200 text-red-800';
-      case 'medium': return 'bg-yellow-50 border-yellow-200 text-yellow-800';
-      case 'low': return 'bg-green-50 border-green-200 text-green-800';
-      default: return 'bg-gray-50 border-gray-200 text-gray-800';
-    }
-  };
-
-  // Format suggestion date properly — parse as local time to avoid UTC day-shift
-  const formatSuggestionDate = (dateString: string) => {
+  // Format a planned date properly — parse as local time to avoid UTC day-shift
+  const formatPlannedDate = (dateString: string) => {
     const [y, m, d] = dateString.split('-').map(Number);
     const date = new Date(y, m - 1, d);
     return date.toLocaleDateString('en-US', {
@@ -151,9 +130,26 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           Good {timeOfDay}, {displayName}!
         </h1>
         <p className="text-gray-600 text-lg tracking-tight">
-          Today is <span className="font-semibold">{todaysDate}</span> and you have a target of{' '}
-          <span className="font-semibold">{dailyTarget}</span>{' '}
-          {todayIsFieldDay ? 'today' : 'the next time you go out for field service'}
+          Today is <span className="font-semibold">{todaysDate}</span>
+          {plan.hoursNeeded <= 0 ? (
+            <> and you have met this month&apos;s target</>
+          ) : nextPlannedDay ? (
+            nextPlannedIsToday ? (
+              <>
+                {' '}and your plan for today is{' '}
+                <span className="font-semibold">{formatHoursMinutesShort(nextPlannedDay.plannedHours)}</span>{' '}
+                in the field
+              </>
+            ) : (
+              <>
+                {' '}and your next planned day is{' '}
+                <span className="font-semibold">{formatPlannedDate(nextPlannedDay.date)}</span>, with{' '}
+                <span className="font-semibold">{formatHoursMinutesShort(nextPlannedDay.plannedHours)}</span> to aim for
+              </>
+            )
+          ) : (
+            <> and there are no field days left to plan this month</>
+          )}
         </p>
       </div>
 
@@ -222,43 +218,86 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
         </div>
       </div>
 
-      {/* Field Service Suggestions */}
-      {suggestions.length > 0 && (
+      {/* The month's plan: which days to go out on, and how long on each */}
+      {plan.hoursNeeded > 0 && (
         <div className="bg-white rounded-xl p-6">
-          <div className="flex items-center space-x-3 mb-4">
+          <div className="flex items-center space-x-3 mb-2">
             <Calendar size={24} className="text-blue-500" />
-            <h3 className="text-lg font-semibold text-gray-800">Suggested Field Service Days</h3>
+            <h3 className="text-lg font-semibold text-gray-800">
+              Your Plan for {getMonthName(currentMonth).split(' ')[0]}
+            </h3>
           </div>
-          
+
+          <p className="text-sm text-gray-600 mb-4">
+            <span className="font-semibold">{formatHoursMinutesShort(plan.hoursNeeded)}</span> to go
+            {plan.days.length > 0 && (
+              <>
+                {' '}&mdash; <span className="font-semibold">{plan.days.length}</span>{' '}
+                {plan.days.length === 1 ? 'day' : 'days'} out to meet it
+              </>
+            )}
+          </p>
+
+          {/* Full days on every remaining field day still would not reach the target,
+              which is a settings problem the user can only fix ahead of time. */}
+          {!plan.onPaceToMeetTarget && (
+            <div className="mb-4 p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm">
+              {plan.days.length === 0 ? (
+                <>
+                  No field days are left this month, so the target stays{' '}
+                  <span className="font-semibold">{formatHoursMinutesShort(plan.shortfallHours)}</span> away. Set the
+                  days you go out, and how long you have on each, in Settings.
+                </>
+              ) : (
+                <>
+                  Even with a full day every time, you would finish{' '}
+                  <span className="font-semibold">{formatHoursMinutesShort(plan.shortfallHours)}</span> short. Add a
+                  field day or more available time in Settings, or plan to go out on a day you had not set aside.
+                </>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
-            {suggestions.slice(0, 5).map((suggestion) => (
+            {plan.days.slice(0, 5).map((day) => (
               <div
-                key={suggestion.date}
-                className={`p-3 rounded-lg border ${getPriorityColor(suggestion.priority)}`}
+                key={day.date}
+                className={`p-3 rounded-lg border ${
+                  day.isMaxed ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
+                }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div>
-                      <p className="font-medium">
-                        {formatSuggestionDate(suggestion.date)}
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <p className="font-medium text-gray-800">
+                        {formatPlannedDate(day.date)}
                       </p>
-                      <p className="text-sm opacity-75">
-                        {suggestion.type === 'h2h' ? 'House to House / Return Visits' : 'Cart Witnessing'}
-                      </p>
+                      {day.isPriority && (
+                        <span className="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                          Priority
+                        </span>
+                      )}
                     </div>
+                    <p className="text-sm text-gray-600">
+                      {day.type === 'h2h' ? 'House to House / Return Visits' : 'Cart Witnessing'}
+                    </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold">{suggestion.potentialHours}h</p>
-                    <p className="text-xs opacity-75 capitalize">{suggestion.priority} priority</p>
+                    <p className="font-semibold text-gray-800">
+                      {formatHoursMinutesShort(day.plannedHours)}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {day.isMaxed ? 'full day' : `of ${formatHoursMinutesShort(day.potentialHours)} set aside`}
+                    </p>
                   </div>
                 </div>
               </div>
             ))}
           </div>
-          
-          {suggestions.length > 5 && (
+
+          {plan.days.length > 5 && (
             <p className="text-sm text-gray-500 mt-3 text-center">
-              +{suggestions.length - 5} more suggestions available
+              +{plan.days.length - 5} more planned {plan.days.length - 5 === 1 ? 'day' : 'days'} this month
             </p>
           )}
         </div>

@@ -1,5 +1,5 @@
-import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServiceSuggestion } from '../types';
-import { getCurrentServiceYearStart, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
+import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServicePlan, FieldServicePlanDay } from '../types';
+import { getCurrentServiceYearStart, getDaysElapsedInMonth, getTotalMinutes, isPriorityFieldDay } from './dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 import { isPreachingActivity } from './activityTypes';
 
@@ -116,88 +116,240 @@ export const calculateYearlyStats = (
   };
 };
 
-export const generateFieldServiceSuggestions = (
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Hours are only ever planned down to the minute, so anything finer is rounding noise
+const HOUR_EPSILON = 1e-6;
+
+/**
+ * Share `hours` out over days that each have their own ceiling.
+ *
+ * An even split alone would ask a two-hour Tuesday for four hours and quietly leave
+ * the month short. So days that an even share would overrun are pinned to what they
+ * actually have, and the hours they cannot take are re-spread over the days that
+ * still have room - repeatedly, until either every hour has a home or every day is
+ * full (classic water-filling).
+ */
+const allocateHours = (hoursNeeded: number, caps: number[]): number[] => {
+  const allocations = new Array(caps.length).fill(0);
+  if (hoursNeeded <= 0) return allocations;
+
+  let open = caps.map((_, index) => index);
+  let remaining = hoursNeeded;
+
+  while (remaining > HOUR_EPSILON && open.length > 0) {
+    const share = remaining / open.length;
+    const stillOpen: number[] = [];
+
+    open.forEach(index => {
+      if (caps[index] <= share + HOUR_EPSILON) {
+        allocations[index] = caps[index];
+        remaining -= caps[index];
+      } else {
+        stillOpen.push(index);
+      }
+    });
+
+    if (stillOpen.length === open.length) {
+      // No day overran its ceiling at this share, so the rest can absorb it evenly
+      stillOpen.forEach(index => { allocations[index] = share; });
+      remaining = 0;
+    }
+
+    open = stillOpen;
+  }
+
+  return allocations;
+};
+
+type PlanCandidate = Omit<FieldServicePlanDay, 'plannedHours' | 'isMaxed'>;
+
+/**
+ * Take `hours` out of a run of days, using as few of them as it takes.
+ *
+ * Thinning the same hours across every day left in the month is the wrong answer to
+ * being ahead: it has the user going out exactly as often as someone still chasing
+ * the target, for an hour at a time. So only the earliest days needed to cover the
+ * hours are called on - the month gets its time back as whole free days rather than
+ * as a shorter afternoon everywhere - and the load is levelled across just those,
+ * which beats maxing the first day and leaving a twenty-minute stub on the next.
+ *
+ * Days that go unused are left out of the plan entirely.
+ */
+const fillDays = (candidates: PlanCandidate[], hours: number): { days: FieldServicePlanDay[]; hoursPlaced: number } => {
+  if (hours <= HOUR_EPSILON || candidates.length === 0) return { days: [], hoursPlaced: 0 };
+
+  let capacityUsed = 0;
+  let dayCount = 0;
+  while (dayCount < candidates.length && capacityUsed < hours - HOUR_EPSILON) {
+    capacityUsed += candidates[dayCount].potentialHours;
+    dayCount++;
+  }
+
+  const chosen = candidates.slice(0, dayCount);
+  const hoursPlaced = Math.min(hours, capacityUsed);
+  const allocations = allocateHours(hoursPlaced, chosen.map(candidate => candidate.potentialHours));
+
+  return {
+    days: chosen.map((candidate, index) => ({
+      ...candidate,
+      plannedHours: allocations[index],
+      isMaxed: allocations[index] >= candidate.potentialHours - HOUR_EPSILON
+    })),
+    hoursPlaced
+  };
+};
+
+/**
+ * What a month still in the future should carry of what the service year needs.
+ *
+ * Its own monthly target is the wrong figure to plan against: a year run ahead or
+ * behind has to be made up somewhere, and spreading the remaining need over the
+ * months left is what keeps the year reachable.
+ */
+const getFutureMonthShare = (
   records: ServiceRecord[],
   settings: Settings,
-  month: string
-): FieldServiceSuggestion[] => {
-  const monthlyStats = calculateMonthlyStats(records, settings, month);
-  const hoursNeeded = Math.max(0, monthlyStats.targetHours - monthlyStats.totalHours);
-  
-  if (hoursNeeded <= 0) {
-    return []; // Already met target
-  }
-  
-  const currentDate = new Date();
-  const currentHour = currentDate.getHours();
+  month: string,
+  profile?: Profile | null
+): number => {
   const [year, monthNum] = month.split('-').map(Number);
+  const usesServiceTypeTargets = profile?.service_type && hasHourRequirement(profile.service_type);
+  const monthlyTarget = usesServiceTypeTargets
+    ? getServiceTypeTargets(profile!.service_type).monthlyTarget
+    : settings.monthlyTarget;
+  const yearlyTarget = usesServiceTypeTargets
+    ? getServiceTypeTargets(profile!.service_type).yearlyTarget
+    : settings.yearlyTarget;
 
-  // Only suggest dates from today onwards within the current month
-  const isCurrentMonth = currentDate.getFullYear() === year && (currentDate.getMonth() + 1) === monthNum;
+  const [serviceYear, serviceMonth] = getCurrentServiceYearStart().split('-').map(Number);
+  const serviceYearStart = new Date(serviceYear, serviceMonth - 1, 1);
+  const serviceYearEndExclusive = new Date(serviceYear + 1, serviceMonth - 1, 1);
+  const plannedMonthStart = new Date(year, monthNum - 1, 1);
 
-  // If this is the current month, determine start day based on time
+  // A month outside the running service year has no year-end to be pulled toward
+  if (plannedMonthStart < serviceYearStart || plannedMonthStart >= serviceYearEndExclusive) {
+    return monthlyTarget;
+  }
+
+  const serviceYearEnd = new Date(serviceYear + 1, serviceMonth - 1, 0);
+  const loggedThisServiceYear = records
+    .filter(record => {
+      const date = new Date(record.date);
+      return date >= serviceYearStart && date <= serviceYearEnd;
+    })
+    .reduce((sum, record) => sum + getTotalMinutes(record.hours, record.minutes) / 60, 0);
+
+  const yearlyHoursNeeded = Math.max(0, yearlyTarget - loggedThisServiceYear);
+  if (yearlyHoursNeeded === 0) return 0;
+
+  const today = new Date();
+  let monthsRemaining = 0;
+  const cursor = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+  while (cursor < serviceYearEndExclusive) {
+    monthsRemaining++;
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return monthsRemaining > 0 ? yearlyHoursNeeded / monthsRemaining : 0;
+};
+
+/**
+ * The plan for a month: which of the set field days to go out on, and how long to
+ * spend on each so the month lands on target.
+ *
+ * Nothing about this is stored, and that is the point - it is rebuilt from the
+ * records as they stand, so a day worked long enough to get ahead eases the days
+ * after it, and a planned day that came and went unlogged pushes its hours onto the
+ * days that are left. The plan a user sees is always the plan from here.
+ */
+export const generateFieldServicePlan = (
+  records: ServiceRecord[],
+  settings: Settings,
+  month: string,
+  profile?: Profile | null
+): FieldServicePlan => {
+  const [year, monthNum] = month.split('-').map(Number);
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === monthNum;
+  const isPastMonth =
+    !isCurrentMonth && new Date(year, monthNum - 1, 1) < new Date(today.getFullYear(), today.getMonth(), 1);
+
+  let hoursNeeded: number;
+  if (isCurrentMonth || isPastMonth) {
+    const monthlyStats = calculateMonthlyStats(records, settings, month, profile);
+    hoursNeeded = Math.max(0, monthlyStats.targetHours - monthlyStats.totalHours);
+  } else {
+    hoursNeeded = getFutureMonthShare(records, settings, month, profile);
+  }
+
+  const emptyPlan: FieldServicePlan = {
+    days: [],
+    hoursNeeded: 0,
+    totalCapacity: 0,
+    shortfallHours: 0,
+    onPaceToMeetTarget: true
+  };
+
+  if (hoursNeeded <= 0) return emptyPlan;
+
+  const daysInMonth = new Date(year, monthNum, 0).getDate();
+
   let startDay: number;
   if (isCurrentMonth) {
-    // If it's late in the day (after 6 PM), start suggestions from tomorrow
-    if (currentHour >= 18) {
-      startDay = currentDate.getDate() + 1;
-    } else {
-      startDay = currentDate.getDate();
-    }
+    // Past 6pm today is effectively spent, so the plan picks up tomorrow
+    startDay = today.getHours() >= 18 ? today.getDate() + 1 : today.getDate();
+  } else if (isPastMonth) {
+    return emptyPlan; // nothing left to plan in a month already over
   } else {
-    startDay = 1; // Start from the 1st for other months
+    startDay = 1;
   }
 
-  const monthEnd = new Date(year, monthNum, 0);
-  const daysInMonth = monthEnd.getDate();
-
-  const suggestions: FieldServiceSuggestion[] = [];
   // A credit logged on a date says nothing about whether that day was worked, so it
-  // must not silence the suggestion for it.
-  const recordedDates = new Set(
+  // must not take the day out of the plan.
+  const workedDates = new Set(
     records.filter(r => r.date.startsWith(month) && isPreachingActivity(r.type)).map(r => r.date)
   );
 
-  // Generate suggestions for remaining days in the month (starting from appropriate day)
+  const monthPad = String(monthNum).padStart(2, '0');
+  const candidates: PlanCandidate[] = [];
+
   for (let day = startDay; day <= daysInMonth; day++) {
-    const date = new Date(year, monthNum - 1, day);
-    // Build date string directly from parts to avoid UTC timezone shifting
-    const dateString = `${year}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    
-    // Skip if already recorded
-    if (recordedDates.has(dateString)) {
-      continue;
-    }
-    
-    // Check if this day matches any of the configured field service days
-    const fieldServiceDay = settings.fieldServiceDays.find(fsd => fsd.day === date.getDay());
-    if (!fieldServiceDay) {
-      continue;
-    }
-    
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    
-    // Determine priority based on hours needed and potential hours
-    let priority: 'high' | 'medium' | 'low' = 'low';
-    if (hoursNeeded >= fieldServiceDay.potentialHours * 0.8) {
-      priority = 'high';
-    } else if (hoursNeeded >= fieldServiceDay.potentialHours * 0.4) {
-      priority = 'medium';
-    }
-    
-    const suggestion = {
+    // Built from the parts rather than a Date so the day cannot shift timezone
+    const dateString = `${year}-${monthPad}-${String(day).padStart(2, '0')}`;
+    if (workedDates.has(dateString)) continue;
+
+    const weekday = new Date(year, monthNum - 1, day).getDay();
+    const fieldServiceDay = settings.fieldServiceDays.find(fsd => fsd.day === weekday);
+    if (!fieldServiceDay) continue;
+
+    candidates.push({
       date: dateString,
-      dayName: dayNames[date.getDay()],
+      dayName: DAY_NAMES[weekday],
       type: fieldServiceDay.type,
       potentialHours: fieldServiceDay.potentialHours,
-      priority
-    };
-    
-    suggestions.push(suggestion);
+      isPriority: isPriorityFieldDay(fieldServiceDay)
+    });
   }
-  
-  // Sort chronologically
-  return suggestions.sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10);
+
+  const totalCapacity = candidates.reduce((sum, candidate) => sum + candidate.potentialHours, 0);
+
+  // Priority days carry the month; the rest are only called on for what is left over
+  const priorityFirst = fillDays(candidates.filter(candidate => candidate.isPriority), hoursNeeded);
+  const fallback = fillDays(
+    candidates.filter(candidate => !candidate.isPriority),
+    hoursNeeded - priorityFirst.hoursPlaced
+  );
+
+  const days = [...priorityFirst.days, ...fallback.days].sort((a, b) => a.date.localeCompare(b.date));
+
+  return {
+    days,
+    hoursNeeded,
+    totalCapacity,
+    shortfallHours: Math.max(0, hoursNeeded - totalCapacity),
+    onPaceToMeetTarget: totalCapacity >= hoursNeeded - HOUR_EPSILON
+  };
 };
 
 export const getProgressPercentage = (current: number, target: number): number => {

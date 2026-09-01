@@ -23,6 +23,12 @@ export interface FieldServiceDay {
   type: 'h2h' | 'cart';
   potentialHours: number;
   label: string;
+  /**
+   * Days to fill first when planning the month. Left unset it follows the type -
+   * house to house is the work, cart days are what a month falls back on - but a
+   * user whose week runs the other way can say so per day.
+   */
+  isPriority?: boolean;
 }
 
 export interface Settings {
@@ -104,10 +110,25 @@ export interface YearlyStats {
   isOnTrack: boolean;
 }
 
-export interface FieldServiceSuggestion {
+/** One field day in the plan: when to go out, and how long to aim for on it. */
+export interface FieldServicePlanDay {
   date: string;
   dayName: string;
   type: 'h2h' | 'cart';
+  // The time set aside for this weekday in settings - the day's ceiling
   potentialHours: number;
-  priority: 'high' | 'medium' | 'low';
+  // What the day has to deliver for the month to land on target
+  plannedHours: number;
+  // The day is being asked for everything it has, so nothing can slip onto it
+  isMaxed: boolean;
+  isPriority: boolean;
+}
+
+export interface FieldServicePlan {
+  days: FieldServicePlanDay[];
+  hoursNeeded: number;
+  // Everything the remaining field days could give at their set available time
+  totalCapacity: number;
+  shortfallHours: number;
+  onPaceToMeetTarget: boolean;
 }

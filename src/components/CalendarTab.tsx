@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, User } from 'lucide-react';
 import { ServiceRecord, ServiceActivity, Settings, Profile } from '../types';
 import { ActivityMeta, getActivityMeta, getAvailableActivities, isCreditActivity } from '../utils/activityTypes';
-import { hasHourRequirement, getServiceTypeTargets } from '../utils/serviceTypes';
-import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getCurrentServiceYearStart } from '../utils/dateUtils';
+import { generateFieldServicePlan } from '../utils/calculations';
+import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
 import { useStudents } from '../hooks/useStudents';
 
@@ -547,17 +547,15 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   const firstDay = getFirstDayOfMonth(year, month + 1);
   const monthName = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-  // ── Estimate helpers ────────────────────────────────────────────────────────
+  // ── Plan helpers ────────────────────────────────────────────────────────────
 
-  const getMonthlyTarget = () =>
-    profile?.service_type && hasHourRequirement(profile.service_type)
-      ? getServiceTypeTargets(profile.service_type).monthlyTarget
-      : settings.monthlyTarget;
+  const monthKey = `${year}-${(month + 1).toString().padStart(2, '0')}`;
 
-  const getYearlyTarget = () =>
-    profile?.service_type && hasHourRequirement(profile.service_type)
-      ? getServiceTypeTargets(profile.service_type).yearlyTarget
-      : settings.yearlyTarget;
+  // The same plan the home screen shows, so a day reads the same in both places
+  const plannedHoursByDate = useMemo(() => {
+    const plan = generateFieldServicePlan(records, settings, monthKey, profile);
+    return new Map(plan.days.map(day => [day.date, day.plannedHours]));
+  }, [records, settings, monthKey, profile]);
 
   /** Format hours as a compact string for calendar cells, rounded to 15-min slots. */
   const formatEstimate = (hours: number): string => {
@@ -570,92 +568,13 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   };
 
   /**
-   * How many hours should the user aim for on this field-service day?
-   * Returns null if the day is past, already logged, not a field day, or target is met.
+   * How many hours the plan asks for on this day, or null when it asks nothing of
+   * it - a day gone by, one already worked, one that was never a field day, or a
+   * month whose target is already met.
    */
-  const calculateDayEstimate = (day: number): number | null => {
-    const today = new Date();
-    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const viewedDate = new Date(year, month, day);
-
-    if (viewedDate < todayMidnight) return null; // past
-    if (!isFieldServiceDay(viewedDate, settings.fieldServiceDays)) return null;
-
-    const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-    if (records.some(r => r.date === dateStr)) return null; // already logged
-
-    const todayYear = today.getFullYear();
-    const todayMonth = today.getMonth(); // 0-indexed
-    const monthlyTarget = getMonthlyTarget();
-    const monthPad = (month + 1).toString().padStart(2, '0');
-
-    if (year === todayYear && month === todayMonth) {
-      // ── Current month: spread remaining hours over remaining unlogged field days ──
-      const totalLoggedThisMonth = records
-        .filter(r => r.date.startsWith(`${year}-${monthPad}`))
-        .reduce((sum, r) => sum + r.hours + r.minutes / 60, 0);
-
-      const hoursNeeded = Math.max(0, monthlyTarget - totalLoggedThisMonth);
-      if (hoursNeeded === 0) return null;
-
-      const daysInThisMonth = new Date(year, month + 1, 0).getDate();
-      let unloggedFieldDays = 0;
-      for (let d = today.getDate(); d <= daysInThisMonth; d++) {
-        if (!isFieldServiceDay(new Date(year, month, d), settings.fieldServiceDays)) continue;
-        const ds = `${year}-${monthPad}-${d.toString().padStart(2, '0')}`;
-        if (!records.some(r => r.date === ds)) unloggedFieldDays++;
-      }
-      if (unloggedFieldDays === 0) return null;
-      return hoursNeeded / unloggedFieldDays;
-
-    } else {
-      // ── Future month: spread yearly-needed hours over remaining service-year months ──
-      const [syYear, syMonthNum] = getCurrentServiceYearStart().split('-').map(Number);
-      const serviceYearStart = new Date(syYear, syMonthNum - 1, 1);
-      const serviceYearEndExcl = new Date(syYear + 1, syMonthNum - 1, 1); // exclusive
-
-      const viewedMonthStart = new Date(year, month, 1);
-      const yearlyTarget = getYearlyTarget();
-
-      let hoursPerMonth: number;
-
-      if (viewedMonthStart >= serviceYearStart && viewedMonthStart < serviceYearEndExcl) {
-        // Within the current service year — use yearly-adjusted monthly allocation
-        const serviceYearEndIncl = new Date(syYear + 1, syMonthNum - 1, 0);
-        const totalLoggedThisYear = records
-          .filter(r => {
-            const d = new Date(r.date);
-            return d >= serviceYearStart && d <= serviceYearEndIncl;
-          })
-          .reduce((sum, r) => sum + r.hours + r.minutes / 60, 0);
-
-        const yearlyHoursNeeded = Math.max(0, yearlyTarget - totalLoggedThisYear);
-        if (yearlyHoursNeeded === 0) return null;
-
-        // Count full months remaining from next month to service year end
-        const nextMonthStart = new Date(todayYear, todayMonth + 1, 1);
-        let monthsRemaining = 0;
-        const temp = new Date(nextMonthStart);
-        while (temp < serviceYearEndExcl) {
-          monthsRemaining++;
-          temp.setMonth(temp.getMonth() + 1);
-        }
-        if (monthsRemaining === 0) return null;
-        hoursPerMonth = yearlyHoursNeeded / monthsRemaining;
-      } else {
-        // Outside service year — fall back to flat monthly target
-        hoursPerMonth = monthlyTarget;
-      }
-
-      // Spread that monthly allocation across field days in the viewed month
-      const daysInViewedMonth = new Date(year, month + 1, 0).getDate();
-      let fieldDaysCount = 0;
-      for (let d = 1; d <= daysInViewedMonth; d++) {
-        if (isFieldServiceDay(new Date(year, month, d), settings.fieldServiceDays)) fieldDaysCount++;
-      }
-      if (fieldDaysCount === 0) return null;
-      return hoursPerMonth / fieldDaysCount;
-    }
+  const getPlannedHours = (day: number): number | null => {
+    const dateStr = `${monthKey}-${day.toString().padStart(2, '0')}`;
+    return plannedHoursByDate.get(dateStr) ?? null;
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -730,7 +649,10 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
     const hasRecords = dayRecords.length > 0;
     const isToday = new Date().toDateString() === date.toDateString();
     const isFuture = isFutureDate(day);
-    const estimate = calculateDayEstimate(day);
+    const estimate = getPlannedHours(day);
+    // A day the plan is asking for. Future cells are dimmed as a rule, but dimming
+    // the one thing the calendar is trying to tell the user to do defeats it.
+    const isPlanned = estimate !== null;
 
     return (
       <button
@@ -738,32 +660,35 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
         onClick={() => handleDayClick(day)}
         disabled={isFuture}
         className={`relative h-20 p-1 w-full text-left transition-colors flex flex-col ${
-          isFuture
-            ? 'bg-gray-100 cursor-not-allowed opacity-50'
-            : isToday
-              ? 'bg-blue-50 hover:bg-blue-100'
-              : 'bg-white hover:bg-gray-100'
+          isToday
+            ? 'bg-blue-100 hover:bg-blue-200'
+            : isPlanned
+              ? `bg-blue-50 ${isFuture ? 'cursor-not-allowed' : 'hover:bg-blue-100'}`
+              : isFuture
+                ? 'bg-gray-100 cursor-not-allowed opacity-50'
+                : 'bg-white hover:bg-gray-100'
         }`}
       >
         {/* Date number at the top */}
         <div className={`text-sm font-medium mb-1 ${
-          isFuture ? 'text-gray-400' :
           isToday ? 'text-blue-600' :
+          isPlanned ? 'text-blue-600' :
+          isFuture ? 'text-gray-400' :
           isFieldDay ? 'text-gray-800' : 'text-gray-400'
         }`}>
           {day}
         </div>
 
         {/* Past unlogged field day — small grey dot */}
-        {isFieldDay && !hasRecords && !isFuture && estimate === null && (
+        {isFieldDay && !hasRecords && !isFuture && !isPlanned && (
           <div className="w-2 h-2 bg-gray-300 rounded-full mb-1" />
         )}
 
-        {/* Upcoming/future field day — greyed-out hour estimate */}
-        {estimate !== null && (
+        {/* A planned day, and how long to spend on it */}
+        {isPlanned && (
           <div className="flex-1 flex items-center justify-center">
-            <span className="text-xs text-gray-300 font-semibold leading-tight text-center">
-              ~{formatEstimate(estimate)}
+            <span className="text-xs font-medium text-blue-300 leading-tight text-center whitespace-nowrap">
+              {formatEstimate(estimate)}
             </span>
           </div>
         )}
@@ -855,6 +780,10 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
           <div className="flex items-center space-x-2">
             <div className="w-3 h-3 bg-gray-300 rounded-full"></div>
             <span>Field service day</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-blue-100 rounded"></div>
+            <span>Planned day &amp; hours</span>
           </div>
         </div>
       </div>
