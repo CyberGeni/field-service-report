@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, User } from 'lucide-r
 import { ServiceRecord, ServiceActivity, Settings, Profile } from '../types';
 import { ActivityMeta, getActivityMeta, getAvailableActivities, isCreditActivity } from '../utils/activityTypes';
 import { hasHourRequirement, getServiceTypeTargets } from '../utils/serviceTypes';
-import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getDateString, getCurrentServiceYearStart } from '../utils/dateUtils';
+import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes, getCurrentServiceYearStart } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
 import { useStudents } from '../hooks/useStudents';
 
@@ -249,7 +249,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
       });
 
       onClose();
-    } catch (error) {
+    } catch {
       addToast({ type: 'error', title: 'Save Failed', description: 'Failed to save service record' });
     } finally {
       setSaving(false);

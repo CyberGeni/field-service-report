@@ -3,7 +3,7 @@ import { Users, Search, Plus, Edit, Trash2, X, Calendar, MapPin, BookOpen, Clock
 import { Student, StudentVisit } from '../types';
 import { useStudents } from '../hooks/useStudents';
 import { useAuth } from '../hooks/useAuth';
-import { useToast } from './ui/toast';
+import { getErrorMessage } from '../utils/errors';
 
 interface StudentModalProps {
   isOpen: boolean;
@@ -33,7 +33,6 @@ const StudentModal: React.FC<StudentModalProps> = ({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const { addToast } = useToast();
 
   // Reset form when modal opens/closes or student changes
   React.useEffect(() => {
@@ -91,8 +90,8 @@ const StudentModal: React.FC<StudentModalProps> = ({
         await onSave(formData);
       }
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to save student');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to save student'));
     } finally {
       setSaving(false);
     }
@@ -331,8 +330,8 @@ const VisitModal: React.FC<VisitModalProps> = ({
         });
       }
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to save visit');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to save visit'));
     } finally {
       setSaving(false);
     }
@@ -827,7 +826,7 @@ const StudentsTab: React.FC = () => {
         setShowDetailsScreen(false);
         setSelectedStudent(null);
       }
-    } catch (error) {
+    } catch {
       // Error is handled by the hook
     } finally {
       setDeleting(false);

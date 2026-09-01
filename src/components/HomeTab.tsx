@@ -1,9 +1,9 @@
 import React from 'react';
-import { Clock, Target, TrendingUp, TrendingDown, User, Calendar, Briefcase, BaggageClaim } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
-import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getStatusColor, getProgressBarColor, generateFieldServiceSuggestions } from '../utils/calculations';
+import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getProgressBarColor, generateFieldServiceSuggestions } from '../utils/calculations';
 import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesShort, isFieldServiceDay } from '../utils/dateUtils';
-import { getServiceTypeTargets, getServiceTypeLabel, hasHourRequirement } from '../utils/serviceTypes';
+import { getServiceTypeTargets, hasHourRequirement } from '../utils/serviceTypes';
 import { ACTIVITY_META } from '../utils/activityTypes';
 import CircularProgress from './CircularProgress';
 
@@ -123,14 +123,6 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
     );
   };
 
-  const getServiceTypeIcon = (type: string) => {
-    switch (type) {
-      case 'h2h': return <Briefcase size={16} className="text-blue-600" />;
-      case 'cart': return <BaggageClaim size={16} className="text-purple-600" />;
-      default: return <Calendar size={16} className="text-gray-600" />;
-    }
-  };
-
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'bg-red-50 border-red-200 text-red-800';
@@ -239,7 +231,7 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           </div>
           
           <div className="space-y-3">
-            {suggestions.slice(0, 5).map((suggestion, index) => (
+            {suggestions.slice(0, 5).map((suggestion) => (
               <div
                 key={suggestion.date}
                 className={`p-3 rounded-lg border ${getPriorityColor(suggestion.priority)}`}

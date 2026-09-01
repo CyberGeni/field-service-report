@@ -1,3 +1,5 @@
+import { FieldServiceDay } from '../types';
+
 export const formatTime = (hours: number, minutes: number): string => {
   const h = Math.floor(hours);
   const m = Math.floor(minutes);
@@ -50,7 +52,7 @@ export const getTimerDisplay = (milliseconds: number): string => {
   return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
-export const isFieldServiceDay = (date: Date, fieldServiceDays: any[]): boolean => {
+export const isFieldServiceDay = (date: Date, fieldServiceDays: FieldServiceDay[]): boolean => {
   return fieldServiceDays.some(fsd => fsd.day === date.getDay());
 };
 

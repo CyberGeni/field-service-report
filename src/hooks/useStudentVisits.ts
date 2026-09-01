@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { VisitSummary } from '../utils/calculations';
 import { readCache, writeCache } from '../utils/offlineCache';
+import { getErrorMessage } from '../utils/errors';
 
 const VISITS_CACHE = 'visits';
 
@@ -17,10 +18,14 @@ let inFlight: { userId: string; request: Promise<VisitSummary[]> } | null = null
 const fetchVisits = (userId: string): Promise<VisitSummary[]> => {
   if (inFlight?.userId === userId) return inFlight.request;
 
-  const request = supabase
-    .from('student_visits')
-    .select('visit_date, student_id')
-    .eq('user_id', userId)
+  // Wrapped in Promise.resolve: the Supabase builder is only a thenable, so its own
+  // .then() stays a PromiseLike with no .finally() to chain off of.
+  const request = Promise.resolve(
+    supabase
+      .from('student_visits')
+      .select('visit_date, student_id')
+      .eq('user_id', userId)
+  )
     .then(({ data, error }) => {
       if (error) throw error;
       return (data || []) as VisitSummary[];
@@ -73,7 +78,7 @@ export const useStudentVisits = () => {
       visitsCache = { userId: user.id, visits: loaded };
       writeCache(VISITS_CACHE, user.id, loaded);
       setVisits(loaded);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading student visits:', err);
 
       // A failed refresh shouldn't wipe figures that are already on screen
@@ -83,7 +88,7 @@ export const useStudentVisits = () => {
       // the device already holds; only the studies count is unknown until there is a
       // connection, and the sync banner already says so.
       setVisits([]);
-      if (navigator.onLine) setError(err.message || 'Failed to load study visits');
+      if (navigator.onLine) setError(getErrorMessage(err, 'Failed to load study visits'));
     } finally {
       setLoading(false);
     }

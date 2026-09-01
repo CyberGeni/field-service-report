@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
 import { readCache, writeCache } from '../utils/offlineCache';
+import { getErrorMessage } from '../utils/errors';
 
 const STUDENTS_CACHE = 'students';
 
@@ -15,11 +16,15 @@ let inFlight: { userId: string; request: Promise<Student[]> } | null = null;
 const fetchStudents = (userId: string): Promise<Student[]> => {
   if (inFlight?.userId === userId) return inFlight.request;
 
-  const request = supabase
-    .from('students')
-    .select('*')
-    .eq('user_id', userId)
-    .order('name', { ascending: true })
+  // Wrapped in Promise.resolve: the Supabase builder is only a thenable, so its own
+  // .then() stays a PromiseLike with no .finally() to chain off of.
+  const request = Promise.resolve(
+    supabase
+      .from('students')
+      .select('*')
+      .eq('user_id', userId)
+      .order('name', { ascending: true })
+  )
     .then(({ data, error }) => {
       if (error) throw error;
       return (data || []) as Student[];
@@ -69,7 +74,7 @@ export const useStudents = () => {
       console.log('Loaded', studentsData.length, 'students');
       setStudents(studentsData);
       writeCache(STUDENTS_CACHE, user.id, studentsData);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading students:', err);
 
       // Offline is a state, not a failure: the list on screen is the last one synced,
@@ -79,7 +84,7 @@ export const useStudents = () => {
         return;
       }
 
-      setError(err.message);
+      setError(getErrorMessage(err));
       addToast({
         type: 'error',
         title: 'Load Failed',
@@ -110,7 +115,7 @@ export const useStudents = () => {
       console.log('Loaded', visitsData?.length || 0, 'visits for student');
       return visitsData || [];
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading student visits:', err);
       addToast({
         type: 'error',
@@ -168,9 +173,9 @@ export const useStudents = () => {
 
       return data;
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving student:', err);
-      setError(err.message);
+      setError(getErrorMessage(err));
       addToast({
         type: 'error',
         title: 'Save Failed',
@@ -239,9 +244,9 @@ export const useStudents = () => {
 
       return data;
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating student:', err);
-      setError(err.message);
+      setError(getErrorMessage(err));
       addToast({
         type: 'error',
         title: 'Update Failed',
@@ -290,9 +295,9 @@ export const useStudents = () => {
         description: `${studentToDelete.name} has been removed from your students list`
       });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting student:', err);
-      setError(err.message);
+      setError(getErrorMessage(err));
       addToast({
         type: 'error',
         title: 'Delete Failed',
@@ -345,7 +350,7 @@ export const useStudents = () => {
 
       return data;
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error saving student visit:', err);
       addToast({
         type: 'error',
@@ -367,7 +372,7 @@ export const useStudents = () => {
         .order('created_at', { ascending: true });
       if (error) throw error;
       return data || [];
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading visits by date:', err);
       return [];
     }
@@ -420,7 +425,7 @@ export const useStudents = () => {
 
       return data;
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error updating student visit:', err);
       addToast({
         type: 'error',
@@ -457,7 +462,7 @@ export const useStudents = () => {
         });
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error deleting student visit:', err);
       addToast({
         type: 'error',

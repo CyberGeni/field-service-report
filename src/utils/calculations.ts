@@ -1,5 +1,5 @@
 import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServiceSuggestion } from '../types';
-import { getCurrentMonth, getCurrentServiceYearStart, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
+import { getCurrentServiceYearStart, getDaysElapsedInMonth, getTotalMinutes } from './dateUtils';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 import { isPreachingActivity } from './activityTypes';
 
@@ -45,7 +45,6 @@ export const calculateMonthlyStats = (
   // Calculate expected hours by now (dynamic tracking)
   const currentDate = new Date();
   const [year, monthNum] = month.split('-').map(Number);
-  const monthStart = new Date(year, monthNum - 1, 1);
   const monthEnd = new Date(year, monthNum, 0);
   const daysInMonth = monthEnd.getDate();
   const currentDay = currentDate.getMonth() === monthNum - 1 && currentDate.getFullYear() === year 

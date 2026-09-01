@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
+import { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { useAuth } from './useAuth'
 import { clearCache, readCache, writeCache } from '../utils/offlineCache'
+import { getErrorMessage } from '../utils/errors'
 import { Profile } from '../types'
 
 const PROFILE_CACHE = 'profile'
@@ -10,7 +11,7 @@ const PROFILE_CACHE = 'profile'
 // callers of this hook can name what it returns without a second import.
 export type { Profile }
 
-export function useProfile(user: any) {
+export function useProfile(user: User | null) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -60,7 +61,7 @@ export function useProfile(user: any) {
     } catch (err) {
       console.error('Unexpected error fetching profile:', err)
       // A cached profile is a working session; only a first run has nothing to show
-      if (!readCache<Profile>(PROFILE_CACHE, user.id)) {
+      if (user && !readCache<Profile>(PROFILE_CACHE, user.id)) {
         setError(err instanceof Error ? err.message : 'An unexpected error occurred')
       }
     } finally {
@@ -213,9 +214,10 @@ export function useProfile(user: any) {
 
       // Return the cache-busted URL
       return { data: cacheBustedUrl, error: null }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Avatar upload error:', err)
-      return { data: null, error: err }
+      // Every throw above is already an Error; this only guards the truly unexpected.
+      return { data: null, error: err instanceof Error ? err : new Error(getErrorMessage(err)) }
     }
   }
 

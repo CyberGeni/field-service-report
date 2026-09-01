@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
-import { User, Upload, Camera, AlertCircle, CheckCircle, HardHat } from 'lucide-react'
-import { Profile } from '../types'
-import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes'
+import { User, Camera, AlertCircle, CheckCircle, HardHat } from 'lucide-react'
+import { getServiceTypeLabel, getServiceTypeDescription } from '../utils/serviceTypes'
+import { getErrorMessage } from '../utils/errors'
 
 interface ProfileSetupProps {
   onComplete: (profileData: {
@@ -10,7 +10,7 @@ interface ProfileSetupProps {
     avatar_url?: string
     is_volunteer: boolean
   }) => Promise<void>
-  onUploadAvatar: (file: File) => Promise<{ data: string | null; error: any }>
+  onUploadAvatar: (file: File) => Promise<{ data: string | null; error: Error | null }>
   loading?: boolean
 }
 
@@ -61,7 +61,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
         setUploadSuccess(true)
         setError('')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Avatar upload error:', err)
       setError('Failed to upload avatar')
       // Create a preview URL so user can still see their selection
@@ -102,8 +102,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
         avatar_url: finalAvatarUrl,
         is_volunteer: isVolunteer
       })
-    } catch (err: any) {
-      setError(err.message || 'Failed to create profile')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to create profile'))
     }
   }
 
@@ -227,7 +227,11 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
                       name="serviceType"
                       value={option.value}
                       checked={serviceType === option.value}
-                      onChange={(e) => setServiceType(e.target.value as any)}
+                      onChange={(e) =>
+                        setServiceType(
+                          e.target.value as 'publisher' | 'auxiliary_pioneer' | 'regular_pioneer'
+                        )
+                      }
                       className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                       disabled={loading || uploading}
                     />

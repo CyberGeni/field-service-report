@@ -25,9 +25,13 @@ export const readOutbox = (userId: string): PendingOperation[] =>
 const writeOutbox = (userId: string, operations: PendingOperation[]) =>
   writeCache(OUTBOX, userId, operations);
 
+// Plain Omit collapses a discriminated union to its shared keys (id, kind) - this
+// distributes it over each member first, so every variant keeps its own extra field.
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+
 export const enqueueOperation = (
   userId: string,
-  operation: Omit<PendingOperation, 'id'>
+  operation: DistributiveOmit<PendingOperation, 'id'>
 ): PendingOperation[] => {
   const queued = [
     ...readOutbox(userId),

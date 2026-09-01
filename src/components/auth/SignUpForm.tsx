@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { ArrowLeft, Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Mail, Lock, AlertCircle, CheckCircle } from 'lucide-react'
 import { AuthError } from '@supabase/supabase-js'
 
 interface SignUpFormProps {

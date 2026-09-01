@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ServiceRecord, ServiceActivity, TimerState, Profile } from '../types';
+import { ServiceRecord, ServiceActivity, Settings, TimerState, Profile } from '../types';
 import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
 import { getAvailableActivities, getActivityMeta } from '../utils/activityTypes';
 import { useToast } from './ui/toast';
@@ -8,7 +8,7 @@ import CreditEntryForm from './CreditEntryForm';
 
 interface LogTabProps {
   records: ServiceRecord[];
-  settings: any;
+  settings: Settings;
   profile?: Profile | null;
   onSaveRecord: (record: ServiceRecord) => void;
   timerState: TimerState;

@@ -6,12 +6,30 @@ import { useToast } from '../components/ui/toast';
 import { useOnlineStatus } from './useOnlineStatus';
 import { readCache, writeCache } from '../utils/offlineCache';
 import { enqueueOperation, flushOutbox, readOutbox } from '../utils/offlineSync';
+import { getErrorMessage } from '../utils/errors';
 
 const RECORDS_CACHE = 'records';
 const SETTINGS_CACHE = 'settings';
 
 const sortByDateDescending = (records: ServiceRecord[]): ServiceRecord[] =>
   [...records].sort((a, b) => b.date.localeCompare(a.date));
+
+// The row shape saved to user_settings - loosely typed since it carries both the
+// current and legacy field-service-days formats side by side.
+interface FieldServiceDayRow {
+  day: number;
+  type: string; // 'h2h' | 'cart', or the legacy 'h2h_rv'
+  potentialHours?: number;
+  potential_hours?: number;
+  label?: string;
+}
+
+interface SettingsRow {
+  monthly_target: number;
+  yearly_target: number;
+  field_service_days_config?: FieldServiceDayRow[];
+  field_service_days?: number[];
+}
 
 const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
@@ -62,7 +80,9 @@ export const useStorage = () => {
         (payload) => {
           console.log('📡 Real-time settings change detected:', payload);
           if (payload.new && payload.eventType !== 'DELETE') {
-            const newSettings = parseSettingsFromDatabase(payload.new);
+            // The subscription is scoped to user_settings, so this row is a SettingsRow
+            // even though the realtime payload types it as a generic string-keyed record.
+            const newSettings = parseSettingsFromDatabase(payload.new as SettingsRow);
             console.log('🔄 Updating settings from real-time:', newSettings);
             // JSONB columns sometimes come back null in real-time payloads.
             // If field_service_days_config is missing, preserve the current
@@ -106,16 +126,15 @@ export const useStorage = () => {
     }
   }, [user]);
 
-  const parseSettingsFromDatabase = (settingsData: any): Settings => {
+  const parseSettingsFromDatabase = (settingsData: SettingsRow): Settings => {
     let fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
-    let wasLegacyConverted = false;
-    
+
     // Try to use the new field_service_days_config column first
     if (settingsData.field_service_days_config && Array.isArray(settingsData.field_service_days_config)) {
       try {
-        fieldServiceDays = settingsData.field_service_days_config.map((fsd: any) => ({
+        fieldServiceDays = settingsData.field_service_days_config.map((fsd: FieldServiceDayRow) => ({
           day: fsd.day,
-          type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type, // Convert old format
+          type: fsd.type === 'h2h_rv' ? 'h2h' : fsd.type as FieldServiceDay['type'], // Convert old format
           potentialHours: fsd.potentialHours || fsd.potential_hours || 2, // Handle different naming
           label: fsd.label || `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][fsd.day]} - ${fsd.type === 'h2h' ? 'House to House/Return Visits' : 'Cart Witnessing'}`
         }));
@@ -128,8 +147,7 @@ export const useStorage = () => {
     // Fallback to legacy field_service_days if config is not available
     else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
       console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
-      wasLegacyConverted = true;
-      
+
       // Convert legacy format to new format with consistent defaults
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       fieldServiceDays = settingsData.field_service_days.map((day: number) => ({
@@ -246,10 +264,10 @@ export const useStorage = () => {
       // Load user settings - this is the critical part
       await loadUserSettings();
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Error loading data:', err);
       // A failed refresh is only an error when there is nothing to fall back on
-      if (!cachedRecords) setError(err.message);
+      if (!cachedRecords) setError(getErrorMessage(err));
     } finally {
       setLoading(false);
       loadingRef.current = false;
@@ -295,7 +313,7 @@ export const useStorage = () => {
           settingsLoadedRef.current = true;
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Error loading settings:', err);
       
       // Retry up to 3 times with exponential backoff
@@ -358,7 +376,7 @@ export const useStorage = () => {
       console.log('✅ Default settings created successfully:', data);
       setSettings(DEFAULT_SETTINGS);
       settingsLoadedRef.current = true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('❌ Error creating default settings:', err);
       // If creation fails, just use default settings locally
       console.log('🔧 Using default settings locally due to creation error');

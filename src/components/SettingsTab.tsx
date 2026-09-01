@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, Briefcase, BaggageClaim, CheckCircle, HardHat } from 'lucide-react';
+import { AuthError } from '@supabase/supabase-js';
+import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, CheckCircle, HardHat } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
+import { getErrorMessage } from '../utils/errors';
 import { useToast } from './ui/toast';
 
 interface SettingsTabProps {
@@ -9,8 +11,8 @@ interface SettingsTabProps {
   profile?: Profile | null;
   onUpdateSettings: (settings: Partial<Settings>) => void;
   onUpdateProfile?: (updates: Partial<Profile>) => Promise<void>;
-  onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
-  onSignOut: () => Promise<{ error: any }>;
+  onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: Error | null }>;
+  onSignOut: () => Promise<{ error: AuthError | null }>;
 }
 
 interface EditProfileModalProps {
@@ -18,7 +20,7 @@ interface EditProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (updates: Partial<Profile>) => Promise<void>;
-  onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: any }>;
+  onUploadAvatar?: (file: File) => Promise<{ data: string | null; error: Error | null }>;
 }
 
 interface EditFieldServiceDayModalProps {
@@ -356,8 +358,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
         description: 'Your profile has been updated successfully'
       });
       onClose();
-    } catch (err: any) {
-      setError(err.message || 'Failed to update profile');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to update profile'));
       addToast({
         type: 'error',
         title: 'Update Failed',

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Navigation from './components/Navigation';
 import LogTab from './components/LogTab';
 import HomeTab from './components/HomeTab';
