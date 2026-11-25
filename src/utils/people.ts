@@ -139,16 +139,6 @@ export const getPersonStatus = (person: Student, today: string): { text: string;
   return { text: person.status === 'study' ? 'No study day set' : 'No visit planned', tone: 'plain' };
 };
 
-/** "MB" for Mrs. Bello, "D" for Daniel - the letters on a person's avatar. */
-export const getInitials = (name: string): string => {
-  const words = name
-    .replace(/^(mr|mrs|ms|miss|dr|bro|sis)\.?\s+/i, match => (name.trim().split(/\s+/).length > 1 ? match : ''))
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  return words.slice(0, 2).map(word => word[0]!.toUpperCase()).join('') || '?';
-};
-
 /** How long ago a date was, in words: "today", "yesterday", "3 days ago", "2 weeks ago". */
 export const timeSince = (date: string | undefined, today: string): string | null => {
   if (!date) return null;

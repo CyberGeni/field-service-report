@@ -7,6 +7,9 @@ import { getDaysInMonth, getFirstDayOfMonth, formatHoursMinutes } from '../utils
 import { getDayOverride, getFieldDayOn } from '../utils/fieldDays';
 import DayPlanSheet from './DayPlanSheet';
 import { useToast } from './ui/toast';
+import Dialog from './ui/Dialog';
+import { motion } from 'motion/react';
+import { dur, ease } from '../lib/motion';
 import { useStudents } from '../hooks/useStudents';
 import { usePlanClock } from '../hooks/usePlanClock';
 
@@ -286,11 +289,8 @@ const EntryModal: React.FC<EntryModalProps> = ({
   const existingRecord = existingRecords.find(r => r.type === selectedType);
   const hasExistingRecord = !!existingRecord;
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onClose={onClose} className="max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
@@ -536,8 +536,7 @@ const EntryModal: React.FC<EntryModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };
 
@@ -545,6 +544,8 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   // Volunteer credit is only part of this calendar for a user who does that work
   const activities = getAvailableActivities(profile);
   const [currentDate, setCurrentDate] = useState(new Date());
+  // Which way the last month change went, so the new month slides in from that side
+  const [slideFrom, setSlideFrom] = useState(0);
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   // A day ahead being planned: taken off, or added as a one-off
@@ -600,6 +601,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
+    setSlideFrom(direction === 'prev' ? -1 : 1);
     // Anchored on the 1st: setMonth on the 31st overflows a short month, so January
     // 31st + 1 month would land on March 3rd and skip February entirely
     setCurrentDate(prev =>
@@ -840,7 +842,13 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
         </div>
         
         {/* Calendar Days */}
-        <div className="grid grid-cols-7 divide-x divide-y divide-gray-200 group">
+        <motion.div
+          key={monthKey}
+          initial={{ opacity: 0, x: slideFrom * 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: dur.base, ease }}
+          className="grid grid-cols-7 divide-x divide-y divide-gray-200 group"
+        >
           {/* Empty cells for days before month starts */}
           {Array.from({ length: firstDay }, (_, i) => renderEmptyDay(i))}
           
@@ -851,7 +859,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
           {Array.from({ length: (7 - ((firstDay + daysInMonth) % 7)) % 7 }, (_, i) => 
             renderEmptyDay(firstDay + daysInMonth + i)
           )}
-        </div>
+        </motion.div>
       </div>
 
       <DayPlanSheet

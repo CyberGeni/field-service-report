@@ -12,6 +12,7 @@ import {
   ReportRounding
 } from '../utils/reportRounding';
 import { useToast } from './ui/toast';
+import Dialog from './ui/Dialog';
 
 interface MonthlyReportPromptProps {
   monthKey: string; // the month being reported, YYYY-MM
@@ -112,13 +113,7 @@ const MonthlyReportPrompt: React.FC<MonthlyReportPromptProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="report-prompt-title"
-    >
-      <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+    <Dialog open onClose={onDismiss} labelledBy="report-prompt-title" className="max-w-md p-6 max-h-[90vh] overflow-y-auto">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center space-x-3">
             <FileText size={24} className="text-blue-500" />
@@ -217,8 +212,7 @@ const MonthlyReportPrompt: React.FC<MonthlyReportPromptProps> = ({
         >
           Remind me later
         </button>
-      </div>
-    </div>
+    </Dialog>
   );
 };
 

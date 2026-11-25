@@ -1,26 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Building2, Camera, X } from 'lucide-react';
+import { Building2, Camera, UserRound, X } from 'lucide-react';
 import { PersonStatus } from '../../types';
-import { getInitials } from '../../utils/people';
 import { usePhotoUrl } from '../../hooks/usePhotoUrl';
 
 /**
- * A person's initials in a circle, coloured by what they are: purple for a study,
- * blue for a return visit. The colour does the work a "Study" tag would otherwise do.
+ * A small contact icon: enough to say "this is a person" at a glance without the
+ * room an initials circle takes. Its colour carries what they are - purple for a
+ * study, blue for a return visit - so no separate tag is needed.
  */
-export const PersonAvatar: React.FC<{ name: string; status: PersonStatus; size?: 'md' | 'lg' }> = ({
-  name,
-  status,
-  size = 'md'
-}) => (
-  <span
+export const PersonAvatar: React.FC<{ status: PersonStatus; size?: 'md' | 'lg' }> = ({ status, size = 'md' }) => (
+  <UserRound
+    size={size === 'lg' ? 28 : 20}
     aria-hidden="true"
-    className={`flex-shrink-0 rounded-full font-bold flex items-center justify-center ${
-      size === 'lg' ? 'w-14 h-14 text-xl' : 'w-10 h-10 text-sm'
-    } ${status === 'study' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}
-  >
-    {getInitials(name)}
-  </span>
+    className={`flex-shrink-0 ${status === 'study' ? 'text-purple-700' : 'text-blue-600'}`}
+  />
 );
 
 /** A photo of where someone lives, or a quiet placeholder until it is on the phone. */

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Minus, Plus, X } from 'lucide-react';
 import { FieldDayOverride, Profile, ServiceRecord, Settings } from '../types';
 import { generateFieldServicePlan } from '../utils/calculations';
@@ -6,6 +6,8 @@ import { formatHoursMinutesShort } from '../utils/dateUtils';
 import { getDayOverride, getFieldDayOn, getUsualFieldDay, withDayOverride } from '../utils/fieldDays';
 import { parseLocalDate } from '../utils/people';
 import { useToast } from './ui/toast';
+import BottomSheet from './ui/BottomSheet';
+import Segmented from './ui/Segmented';
 
 interface DayPlanSheetProps {
   // The day being changed, YYYY-MM-DD; null keeps the sheet closed
@@ -31,8 +33,14 @@ const typeLabel = (type: 'h2h' | 'cart') => (type === 'h2h' ? 'House to house' :
  */
 const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, profile, onUpdateSettings, onClose }) => {
   const { addToast } = useToast();
-  const usual = date ? getUsualFieldDay(settings, date) : null;
-  const existing = date ? getDayOverride(settings, date) : null;
+  // Closing clears `date`, but the sheet is still sliding away for a moment after -
+  // keep showing the day it was opened for until it has gone
+  const lastDate = useRef<string | null>(null);
+  if (date) lastDate.current = date;
+  const day = date ?? lastDate.current;
+
+  const usual = day ? getUsualFieldDay(settings, day) : null;
+  const existing = day ? getDayOverride(settings, day) : null;
 
   const [openedFor, setOpenedFor] = useState<string | null>(null);
   const [choice, setChoice] = useState<Choice>('off');
@@ -55,36 +63,27 @@ const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, pr
     }
   }
 
-  useEffect(() => {
-    if (!date) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [date, onClose]);
-
   const draft: FieldDayOverride | null = useMemo(() => {
-    if (!date) return null;
+    if (!day) return null;
     const trimmed = note.trim() || undefined;
     return choice === 'off'
-      ? { date, kind: 'off', note: trimmed }
-      : { date, kind: 'out', type, potentialHours: hours, note: trimmed };
-  }, [date, choice, hours, type, note]);
+      ? { date: day, kind: 'off', note: trimmed }
+      : { date: day, kind: 'out', type, potentialHours: hours, note: trimmed };
+  }, [day, choice, hours, type, note]);
 
   // What the change does to the month, worked out from the plan before and after
   const effect = useMemo(() => {
-    if (!date || !draft) return null;
-    const month = date.slice(0, 7);
+    if (!day || !draft) return null;
+    const month = day.slice(0, 7);
     const before = generateFieldServicePlan(records, settings, month, profile);
     const after = generateFieldServicePlan(
       records,
-      { ...settings, dayOverrides: withDayOverride(settings, date, draft) },
+      { ...settings, dayOverrides: withDayOverride(settings, day, draft) },
       month,
       profile
     );
-    const plannedBefore = before.days.find(day => day.date === date)?.plannedHours ?? 0;
-    const plannedAfter = after.days.find(day => day.date === date)?.plannedHours ?? 0;
+    const plannedBefore = before.days.find(planned => planned.date === day)?.plannedHours ?? 0;
+    const plannedAfter = after.days.find(planned => planned.date === day)?.plannedHours ?? 0;
     const newShortfall = after.shortfallHours - before.shortfallHours;
 
     if (choice === 'off') {
@@ -108,12 +107,12 @@ const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, pr
       };
     }
     return { tone: 'good' as const, text: `Plan ${formatHoursMinutesShort(plannedAfter)} here, which eases your other days.` };
-  }, [date, draft, choice, records, settings, profile]);
+  }, [day, draft, choice, records, settings, profile]);
 
-  if (!date || !draft) return null;
+  if (!day || !draft) return null;
 
   const save = async (override: FieldDayOverride | null) => {
-    await onUpdateSettings({ dayOverrides: withDayOverride(settings, date, override) });
+    await onUpdateSettings({ dayOverrides: withDayOverride(settings, day, override) });
     addToast({
       type: 'success',
       title: override?.kind === 'off' ? 'Day off saved' : override ? 'Day saved' : 'Back to your usual week',
@@ -123,7 +122,7 @@ const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, pr
     onClose();
   };
 
-  const dayLabel = parseLocalDate(date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dayLabel = parseLocalDate(day).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const choices: { id: Choice; label: string }[] = usual
     ? [{ id: 'out', label: 'Going out' }, { id: 'off', label: 'Not going out' }]
     : [{ id: 'off', label: 'Not going out' }, { id: 'out', label: 'Going out' }];
@@ -134,12 +133,8 @@ const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, pr
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
-      <div role="dialog" aria-modal="true" aria-labelledby="day-plan-title" className="bg-white w-full max-w-md rounded-t-3xl max-h-[92vh] flex flex-col animate-fadeIn">
-        <div className="flex justify-center pt-2">
-          <span className="w-10 h-1.5 rounded-full bg-gray-300" />
-        </div>
-        <div className="flex items-start justify-between pl-5 pr-3 pt-2">
+    <BottomSheet open={date !== null} onClose={onClose} labelledBy="day-plan-title">
+        <div className="flex items-start justify-between pl-5 pr-3 pt-1">
           <div>
             <h2 id="day-plan-title" className="text-xl font-bold text-gray-800 font-libre-franklin">{dayLabel}</h2>
             <p className="text-sm text-gray-600 mt-0.5">
@@ -152,21 +147,12 @@ const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, pr
         </div>
 
         <div className="overflow-y-auto px-5 pt-4 pb-4 space-y-5">
-          <div role="group" aria-label="This day" className="grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl">
-            {choices.map(option => (
-              <button
-                key={option.id}
-                type="button"
-                aria-pressed={choice === option.id}
-                onClick={() => setChoice(option.id)}
-                className={`h-11 rounded-lg text-[15px] font-semibold ${
-                  choice === option.id ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <Segmented<Choice>
+            label="This day"
+            value={choice}
+            onChange={setChoice}
+            options={choices.map(option => ({ value: option.id, label: option.label }))}
+          />
 
           {choice === 'out' && (
             <div className="space-y-4">
@@ -244,8 +230,7 @@ const DayPlanSheet: React.FC<DayPlanSheetProps> = ({ date, records, settings, pr
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };
 

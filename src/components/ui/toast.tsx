@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { dur, ease, softSpring } from '../../lib/motion'
 import { CheckCircle, AlertCircle, Info, X } from 'lucide-react'
 
 export type ToastType = 'success' | 'error' | 'info'
@@ -58,10 +60,23 @@ const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useToast()
 
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
-      {toasts.map(toast => (
-        <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
-      ))}
+    <div className="fixed top-4 right-4 left-4 sm:left-auto z-[60] flex flex-col items-end gap-2 pointer-events-none">
+      {/* Each message slides in from the side and out again; the ones left close up
+          the gap smoothly instead of jumping */}
+      <AnimatePresence initial={false}>
+        {toasts.map(toast => (
+          <motion.div
+            key={toast.id}
+            layout
+            initial={{ opacity: 0, x: 24, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1, transition: softSpring }}
+            exit={{ opacity: 0, x: 24, transition: { duration: dur.fast, ease } }}
+            className="w-full max-w-sm pointer-events-auto"
+          >
+            <ToastItem toast={toast} onRemove={removeToast} />
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   )
 }
@@ -90,7 +105,7 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: (id: string) => void }> = ({
   }
 
   return (
-    <div className={`${getBackgroundColor()} border rounded-xl p-4 shadow-lg animate-fadeIn`}>
+    <div className={`${getBackgroundColor()} border rounded-xl p-4 shadow-lg`}>
       <div className="flex items-start space-x-3">
         {getIcon()}
         <div className="flex-1 min-w-0">

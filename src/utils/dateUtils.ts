@@ -39,6 +39,13 @@ export const formatHoursMinutesShort = (totalHours: number): string => {
   return `${hours}h ${minutes}min`;
 };
 
+/** "38h 30m" - for big figures and small tiles, where "min" would push it onto a second line. */
+export const formatHoursMinutesTight = (totalHours: number): string => {
+  const { hours, minutes } = splitHoursMinutes(totalHours);
+  if (hours === 0) return `${minutes}m`;
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+};
+
 export const getTotalMinutes = (hours: number, minutes: number): number => {
   return hours * 60 + minutes;
 };

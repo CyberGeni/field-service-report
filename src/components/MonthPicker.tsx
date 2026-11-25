@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { getCurrentMonth, parseMonthKey } from '../utils/dateUtils';
+import Dialog from './ui/Dialog';
 
 interface MonthPickerProps {
   isOpen: boolean;
@@ -45,8 +46,6 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, monthKey]);
 
-  if (!isOpen) return null;
-
   const canGoPreviousYear = viewYear > earliestYear;
   const canGoNextYear = viewYear < latestYear;
 
@@ -62,13 +61,7 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="month-picker-title"
-    >
-      <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+    <Dialog open={isOpen} onClose={onClose} labelledBy="month-picker-title" className="max-w-sm p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 id="month-picker-title" className="text-lg font-semibold text-gray-800">
             Select Month
@@ -133,8 +126,7 @@ const MonthPicker: React.FC<MonthPickerProps> = ({
             );
           })}
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };
 

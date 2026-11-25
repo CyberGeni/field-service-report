@@ -7,6 +7,7 @@ import { getDateString, isPriorityFieldDay } from '../utils/dateUtils';
 import { withDayOverride } from '../utils/fieldDays';
 import { getErrorMessage } from '../utils/errors';
 import { useToast } from './ui/toast';
+import Dialog from './ui/Dialog';
 
 interface SettingsTabProps {
   settings: Settings;
@@ -130,11 +131,8 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
     }));
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full">
+    <Dialog open={isOpen} onClose={onClose} className="max-w-md">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
@@ -255,8 +253,7 @@ const EditFieldServiceDayModal: React.FC<EditFieldServiceDayModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };
 
@@ -390,11 +387,8 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onClose={onClose} className="max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
@@ -581,8 +575,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   );
 };
 
