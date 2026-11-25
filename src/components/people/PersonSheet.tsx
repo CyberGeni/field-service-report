@@ -443,9 +443,10 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
               />
             </div>
 
-            {/* The rest only matters once they are studying, or when tidying a record */}
-            {(form.status === 'study' || isEdit) && (
-              <div className="space-y-4 pt-1">
+            {/* Date met is asked of everyone: it defaults to today, but not everyone is
+                written down the day they were met. The rest only matters once they are
+                studying, or when tidying a record. */}
+            <div className="space-y-4 pt-1">
                 {form.status === 'study' && (
                   <div className="space-y-1.5">
                     <label htmlFor="person-place" className="block text-sm font-semibold text-gray-800">Where the study is up to</label>
@@ -458,7 +459,7 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
                     />
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-3">
+                <div className={`grid gap-3 ${isEdit ? 'grid-cols-2' : 'grid-cols-1'}`}>
                   <div className="space-y-1.5">
                     <label htmlFor="person-met" className="block text-sm font-semibold text-gray-800">Date met</label>
                     <input
@@ -484,8 +485,7 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
                     </div>
                   )}
                 </div>
-              </div>
-            )}
+            </div>
           </div>
 
           <div className="px-5 pt-3 pb-6 border-t border-gray-100 space-y-2">
