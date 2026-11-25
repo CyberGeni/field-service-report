@@ -3,7 +3,8 @@ import { AuthError } from '@supabase/supabase-js';
 import { User, Target, Calendar, LogOut, Camera, Edit, X, Plus, Trash2, CheckCircle, HardHat } from 'lucide-react';
 import { Settings, Profile, FieldServiceDay } from '../types';
 import { getServiceTypeTargets, getServiceTypeLabel, getServiceTypeDescription, hasHourRequirement } from '../utils/serviceTypes';
-import { isPriorityFieldDay } from '../utils/dateUtils';
+import { getDateString, isPriorityFieldDay } from '../utils/dateUtils';
+import { withDayOverride } from '../utils/fieldDays';
 import { getErrorMessage } from '../utils/errors';
 import { useToast } from './ui/toast';
 
@@ -705,6 +706,21 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  const todayString = getDateString(new Date());
+  const upcomingOverrides = (localSettings.dayOverrides ?? []).filter(override => override.date >= todayString);
+
+  const removeOverride = async (date: string) => {
+    try {
+      const updatedSettings = { ...localSettings, dayOverrides: withDayOverride(localSettings, date, null) };
+      setLocalSettings(updatedSettings);
+      await onUpdateSettings(updatedSettings);
+      addToast({ type: 'success', title: 'Removed', description: 'That day is back to your usual week' });
+    } catch (error) {
+      console.error('Error removing day change:', error);
+      addToast({ type: 'error', title: 'Update Failed', description: 'Could not remove that day' });
+    }
+  };
+
   const handleTargetChange = async (field: 'monthlyTarget' | 'yearlyTarget', value: number) => {
     try {
       const updatedSettings = { ...localSettings, [field]: value };
@@ -933,6 +949,44 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <p className="font-medium">No field service days configured</p>
             <p className="text-sm">Add the days you go out, and how long you have on each, to get a plan for the month</p>
           </div>
+        )}
+      </div>
+
+      {/* One-off changes to the week: set from the Calendar, reviewed and removed here */}
+      <div className="bg-white rounded-xl p-6">
+        <div className="flex items-center space-x-3 mb-1">
+          <Calendar size={24} className="text-blue-500" />
+          <h3 className="text-lg font-semibold text-gray-800">Days off &amp; extra days</h3>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">
+          Tap a day ahead on the Calendar to take it off or add it. Your plan spreads the hours to match.
+        </p>
+        {upcomingOverrides.length > 0 ? (
+          <ul className="space-y-2">
+            {upcomingOverrides.map(override => (
+              <li key={override.date} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div className="min-w-0">
+                  <p className="font-medium text-gray-800">
+                    {new Date(`${override.date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </p>
+                  <p className="text-sm text-gray-600 truncate">
+                    {override.kind === 'off'
+                      ? `Not going out${override.note ? ` · ${override.note}` : ''}`
+                      : `Going out · ${override.potentialHours}h ${override.type === 'h2h' ? 'house to house' : 'cart'}${override.note ? ` · ${override.note}` : ''}`}
+                  </p>
+                </div>
+                <button
+                  onClick={() => removeOverride(override.date)}
+                  aria-label={`Remove the change on ${override.date}`}
+                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg flex-shrink-0"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-gray-600">Nothing planned away from your usual week.</p>
         )}
       </div>
 

@@ -121,11 +121,24 @@ const applyOperation = async (userId: string, operation: PendingOperation): Prom
       return;
     }
     case 'saveSettings': {
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({ ...operation.row, user_id: userId }, { onConflict: 'user_id' });
-      if (error) throw error;
-      return;
+      const save = (row: Record<string, unknown>) =>
+        supabase.from('user_settings').upsert({ ...row, user_id: userId }, { onConflict: 'user_id' });
+
+      const { error } = await save(operation.row);
+      if (!error) return;
+
+      // Settings share a queue with hours, and a queue stops at its first failure - so
+      // a database that has not had the one-off days column added yet must not hold
+      // every later record hostage. Save the rest; the days off stay on the device.
+      if ('day_overrides' in operation.row && /day_overrides/.test(`${error.message} ${error.details ?? ''}`)) {
+        console.warn('user_settings has no day_overrides column yet - saving settings without it');
+        const rest = { ...operation.row };
+        delete rest.day_overrides;
+        const { error: retryError } = await save(rest);
+        if (retryError) throw retryError;
+        return;
+      }
+      throw error;
     }
     case 'saveReportSubmission': {
       const { error } = await supabase

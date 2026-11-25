@@ -192,9 +192,9 @@ function App() {
           />
         );
       case 'home':
-        return <HomeTab records={records} settings={settings} profile={profile} onOpenPerson={openPerson} />;
+        return <HomeTab records={records} settings={settings} profile={profile} onOpenPerson={openPerson} onUpdateSettings={updateSettings} />;
       case 'calendar':
-        return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
+        return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} onUpdateSettings={updateSettings} />;
       case 'stats':
         return <StatsPage records={records} profile={profile} userId={user?.id} />;
       case 'students':
@@ -211,7 +211,7 @@ function App() {
           />
         );
       default:
-        return <HomeTab records={records} settings={settings} profile={profile} onOpenPerson={openPerson} />;
+        return <HomeTab records={records} settings={settings} profile={profile} onOpenPerson={openPerson} onUpdateSettings={updateSettings} />;
     }
   };
 

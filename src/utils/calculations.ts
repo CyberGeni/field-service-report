@@ -4,9 +4,9 @@ import {
   getCurrentServiceYearBounds,
   getDaysElapsedInMonth,
   getTotalMinutes,
-  isInCurrentServiceYear,
-  isPriorityFieldDay
+  isInCurrentServiceYear
 } from './dateUtils';
+import { getFieldDayOn } from './fieldDays';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 import { isPreachingActivity } from './activityTypes';
 
@@ -326,16 +326,19 @@ export const generateFieldServicePlan = (
     const dateString = `${year}-${monthPad}-${String(day).padStart(2, '0')}`;
     if (workedDates.has(dateString)) continue;
 
-    const weekday = new Date(year, monthNum - 1, day).getDay();
-    const fieldServiceDay = settings.fieldServiceDays.find(fsd => fsd.day === weekday);
-    if (!fieldServiceDay) continue;
+    // A day marked off drops out here, and its hours fall to the days that are left;
+    // a one-off extra day comes in here as a day like any other
+    const fieldDay = getFieldDayOn(settings, dateString);
+    if (!fieldDay) continue;
 
     candidates.push({
       date: dateString,
-      dayName: DAY_NAMES[weekday],
-      type: fieldServiceDay.type,
-      potentialHours: fieldServiceDay.potentialHours,
-      isPriority: isPriorityFieldDay(fieldServiceDay)
+      dayName: DAY_NAMES[new Date(year, monthNum - 1, day).getDay()],
+      type: fieldDay.type,
+      potentialHours: fieldDay.potentialHours,
+      isPriority: fieldDay.isPriority,
+      isOneOff: fieldDay.source === 'override',
+      note: fieldDay.note
     });
   }
 

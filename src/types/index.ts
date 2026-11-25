@@ -31,10 +31,25 @@ export interface FieldServiceDay {
   isPriority?: boolean;
 }
 
+/**
+ * A change to the usual week for one date.
+ *
+ * `off`: not going out that day - a wedding, a convention, a sick child - even if it
+ * is one of the usual field service days. `out`: going out that day, for the hours
+ * given: an extra day to make up for one taken off, or a usual day with more or less
+ * time than usual.
+ */
+export type FieldDayOverride =
+  | { date: string; kind: 'off'; note?: string }
+  | { date: string; kind: 'out'; type: 'h2h' | 'cart'; potentialHours: number; note?: string };
+
 export interface Settings {
   monthlyTarget: number;
   yearlyTarget: number;
   fieldServiceDays: FieldServiceDay[];
+  // One-off changes to the week, by date. Optional: copies cached before these
+  // existed have none.
+  dayOverrides?: FieldDayOverride[];
   username: string;
   password: string;
 }
@@ -143,6 +158,9 @@ export interface FieldServicePlanDay {
   // The day is being asked for everything it has, so nothing can slip onto it
   isMaxed: boolean;
   isPriority: boolean;
+  // Set for this date alone rather than one of the usual days
+  isOneOff: boolean;
+  note?: string;
 }
 
 export interface FieldServicePlan {

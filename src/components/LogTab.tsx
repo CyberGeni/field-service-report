@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ServiceRecord, ServiceActivity, Settings, TimerState, Profile } from '../types';
-import { isFieldServiceDay, getDateString } from '../utils/dateUtils';
+import { getDateString } from '../utils/dateUtils';
+import { getDayOverride, getFieldDayOn } from '../utils/fieldDays';
 import { getAvailableActivities, getActivityMeta } from '../utils/activityTypes';
 import { useToast } from './ui/toast';
 import Timer from './Timer';
@@ -53,7 +54,9 @@ const LogTab: React.FC<LogTabProps> = ({
   };
 
   const today = new Date();
-  const isFieldDay = isFieldServiceDay(today, settings.fieldServiceDays);
+  // Days off and one-off extra days count here exactly as they do in the plan
+  const isFieldDay = getFieldDayOn(settings, getDateString(today)) !== null;
+  const todayOff = getDayOverride(settings, getDateString(today));
 
   // Find the most recent field service day (within the past 7 days)
   const lastFieldServiceDay = new Date();
@@ -61,7 +64,7 @@ const LogTab: React.FC<LogTabProps> = ({
   while (daysBack <= 7) {
     const checkDate = new Date(today);
     checkDate.setDate(checkDate.getDate() - daysBack);
-    if (isFieldServiceDay(checkDate, settings.fieldServiceDays)) {
+    if (getFieldDayOn(settings, getDateString(checkDate))) {
       lastFieldServiceDay.setTime(checkDate.getTime());
       break;
     }
@@ -107,6 +110,11 @@ const LogTab: React.FC<LogTabProps> = ({
   const getStatusMessage = () => {
     if (isFieldDay) {
       return { message: "It's a field service day! Ready to log your time.", type: 'active' };
+    } else if (todayOff?.kind === 'off') {
+      return {
+        message: `You marked today as a day off${todayOff.note ? ` (${todayOff.note})` : ''} - its hours are spread over your other days.`,
+        type: 'complete'
+      };
     } else if (!hasLoggedLastFieldDay && daysBack <= 7) {
       return {
         message: `Don't forget to log your hours from ${lastFieldServiceDay.toLocaleDateString()}`,

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Calendar } from 'lucide-react';
 import { ServiceRecord, Settings, Profile } from '../types';
 import { calculateMonthlyStats, calculateYearlyStats, getProgressPercentage, getProgressBarColor, generateFieldServicePlan } from '../utils/calculations';
@@ -8,15 +8,19 @@ import { ACTIVITY_META } from '../utils/activityTypes';
 import CircularProgress from './CircularProgress';
 import { usePlanClock } from '../hooks/usePlanClock';
 import VisitTodayCard from './people/VisitTodayCard';
+import DayPlanSheet from './DayPlanSheet';
 
 interface HomeTabProps {
   records: ServiceRecord[];
   settings: Settings;
   profile?: Profile | null;
   onOpenPerson?: (personId: string) => void;
+  onUpdateSettings: (settings: Partial<Settings>) => Promise<void> | void;
 }
 
-const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPerson }) => {
+const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPerson, onUpdateSettings }) => {
+  // A planned day being changed - most often taken off for something that came up
+  const [planningDate, setPlanningDate] = useState<string | null>(null);
   // Everything below is rebuilt from "now" on each render; this just makes sure a
   // render happens when the evening cutoff or midnight changes what "now" plans
   usePlanClock();
@@ -54,7 +58,13 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPer
 
   // The plan is chronological, so the first day left in it is the next one to go out on
   const nextPlannedDay = plan.days[0];
-  const nextPlannedIsToday = nextPlannedDay?.date === getDateString(new Date());
+  const todayString = getDateString(new Date());
+  const nextPlannedIsToday = nextPlannedDay?.date === todayString;
+
+  // Days taken off for the rest of the month, so the plan's numbers make sense
+  const daysOffAhead = (settings.dayOverrides ?? []).filter(
+    override => override.kind === 'off' && override.date >= todayString && override.date.startsWith(currentMonth)
+  );
 
   // Determine progress bar color based on progress
   const getProgressColor = (progress: number) => {
@@ -258,8 +268,8 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPer
               ) : (
                 <>
                   Even with a full day every time, you would finish{' '}
-                  <span className="font-semibold">{formatHoursMinutesShort(plan.shortfallHours)}</span> short. Add a
-                  field day or more available time in Settings, or plan to go out on a day you had not set aside.
+                  <span className="font-semibold">{formatHoursMinutesShort(plan.shortfallHours)}</span> short. Add an
+                  extra day by tapping it on the Calendar, or give your usual days more time in Settings.
                 </>
               )}
             </div>
@@ -293,14 +303,35 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPer
                     <p className="font-semibold text-gray-800">
                       {formatHoursMinutesShort(day.plannedHours)}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-600">
                       {day.isMaxed ? 'full day' : `of ${formatHoursMinutesShort(day.potentialHours)} set aside`}
                     </p>
                   </div>
                 </div>
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-black/5">
+                  <span className="text-xs text-gray-600 truncate">
+                    {day.isOneOff ? `Extra day${day.note ? ` · ${day.note}` : ''}` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPlanningDate(day.date)}
+                    className="flex-shrink-0 h-9 px-3 -mr-1 rounded-lg text-sm font-semibold text-blue-700 hover:bg-white/70"
+                  >
+                    Can&apos;t go?
+                  </button>
+                </div>
               </div>
             ))}
           </div>
+
+          {daysOffAhead.length > 0 && (
+            <p className="text-sm text-gray-600 mt-3">
+              <span className="font-semibold">Days off:</span>{' '}
+              {daysOffAhead
+                .map(off => `${formatPlannedDate(off.date)}${off.note ? ` (${off.note})` : ''}`)
+                .join(', ')}
+            </p>
+          )}
 
           {plan.days.length > 5 && (
             <p className="text-sm text-gray-500 mt-3 text-center">
@@ -309,6 +340,15 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPer
           )}
         </div>
       )}
+
+      <DayPlanSheet
+        date={planningDate}
+        records={records}
+        settings={settings}
+        profile={profile}
+        onUpdateSettings={onUpdateSettings}
+        onClose={() => setPlanningDate(null)}
+      />
 
       {/* Return visits and studies due today - nothing at all on a day nobody is */}
       <VisitTodayCard onOpenPerson={onOpenPerson} />

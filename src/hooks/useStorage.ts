@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ServiceRecord, ServiceActivity, Settings, FieldServiceDay } from '../types';
+import { ServiceRecord, ServiceActivity, Settings, FieldServiceDay, FieldDayOverride } from '../types';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
@@ -30,7 +30,23 @@ interface SettingsRow {
   yearly_target: number;
   field_service_days_config?: FieldServiceDayRow[];
   field_service_days?: number[];
+  day_overrides?: unknown;
 }
+
+/** One-off days off and extra days as stored, keeping only entries that make sense. */
+const parseDayOverrides = (value: unknown): FieldDayOverride[] => {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): FieldDayOverride[] => {
+    if (!entry || typeof entry !== 'object' || !/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date))) return [];
+    const note = typeof entry.note === 'string' && entry.note.trim() ? entry.note.trim() : undefined;
+    if (entry.kind === 'off') return [{ date: entry.date, kind: 'off', note }];
+    const hours = Number(entry.potentialHours);
+    if (entry.kind === 'out' && hours > 0) {
+      return [{ date: entry.date, kind: 'out', type: entry.type === 'cart' ? 'cart' : 'h2h', potentialHours: hours, note }];
+    }
+    return [];
+  });
+};
 
 const DEFAULT_SETTINGS: Settings = {
   monthlyTarget: 10,
@@ -39,6 +55,7 @@ const DEFAULT_SETTINGS: Settings = {
     { day: 6, type: 'h2h', potentialHours: 4, label: 'Saturday - House to House/Return Visits' },
     { day: 0, type: 'h2h', potentialHours: 3, label: 'Sunday - House to House/Return Visits' }
   ],
+  dayOverrides: [],
   username: '',
   password: ''
 };
@@ -88,14 +105,13 @@ export const useStorage = () => {
             // JSONB columns sometimes come back null in real-time payloads.
             // If field_service_days_config is missing, preserve the current
             // fieldServiceDays instead of reverting to defaults.
-            if (!payload.new.field_service_days_config) {
-              setSettings(prev => ({
-                ...newSettings,
-                fieldServiceDays: prev.fieldServiceDays
-              }));
-            } else {
-              setSettings(newSettings);
-            }
+            // The same goes for the one-off days, which a database without that column
+            // yet does not send at all.
+            setSettings(prev => ({
+              ...newSettings,
+              fieldServiceDays: payload.new.field_service_days_config ? newSettings.fieldServiceDays : prev.fieldServiceDays,
+              dayOverrides: Array.isArray(payload.new.day_overrides) ? newSettings.dayOverrides : prev.dayOverrides
+            }));
             settingsLoadedRef.current = true;
           }
         }
@@ -176,6 +192,7 @@ export const useStorage = () => {
       monthlyTarget: settingsData.monthly_target,
       yearlyTarget: settingsData.yearly_target,
       fieldServiceDays,
+      dayOverrides: parseDayOverrides(settingsData.day_overrides),
       username: '', // We'll get this from profile
       password: '' // Not stored in database
     };
@@ -495,7 +512,8 @@ export const useStorage = () => {
       monthly_target: updatedSettings.monthlyTarget,
       yearly_target: updatedSettings.yearlyTarget,
       field_service_days: updatedSettings.fieldServiceDays.map(fsd => fsd.day), // Legacy format for compatibility
-      field_service_days_config: updatedSettings.fieldServiceDays // New format with full structure
+      field_service_days_config: updatedSettings.fieldServiceDays, // New format with full structure
+      day_overrides: updatedSettings.dayOverrides ?? []
     };
 
     // Settings apply on the device immediately and upload behind the user, so the
