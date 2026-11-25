@@ -83,7 +83,7 @@ export const useStorage = () => {
   useEffect(() => {
     if (!user) return;
 
-    console.log('🔄 Setting up real-time subscription for user:', user.id);
+    console.log('🔄 Setting up real-time subscription');
 
     const subscription = supabase
       .channel('user_settings_changes')
@@ -96,12 +96,12 @@ export const useStorage = () => {
           filter: `user_id=eq.${user.id}`
         },
         (payload) => {
-          console.log('📡 Real-time settings change detected:', payload);
+          console.log('📡 Real-time settings change detected');
           if (payload.new && payload.eventType !== 'DELETE') {
             // The subscription is scoped to user_settings, so this row is a SettingsRow
             // even though the realtime payload types it as a generic string-keyed record.
             const newSettings = parseSettingsFromDatabase(payload.new as SettingsRow);
-            console.log('🔄 Updating settings from real-time:', newSettings);
+            console.log('🔄 Updating settings from real-time');
             // JSONB columns sometimes come back null in real-time payloads.
             // If field_service_days_config is missing, preserve the current
             // fieldServiceDays instead of reverting to defaults.
@@ -127,7 +127,7 @@ export const useStorage = () => {
   // Load data when user changes
   useEffect(() => {
     if (user) {
-      console.log('👤 User changed, loading data for:', user.id);
+      console.log('👤 User changed, loading data');
       // Reset refs when user changes
       settingsLoadedRef.current = false;
       initialLoadCompleteRef.current = false;
@@ -158,7 +158,7 @@ export const useStorage = () => {
           // reads as "follow the type" rather than as "not a priority"
           isPriority: fsd.isPriority
         }));
-        console.log('✅ Using field_service_days_config:', fieldServiceDays);
+        console.log('✅ Using field_service_days_config');
       } catch (e) {
         console.warn('⚠️ Failed to parse field_service_days_config:', e);
         fieldServiceDays = DEFAULT_SETTINGS.fieldServiceDays;
@@ -166,7 +166,7 @@ export const useStorage = () => {
     }
     // Fallback to legacy field_service_days if config is not available
     else if (settingsData.field_service_days && Array.isArray(settingsData.field_service_days)) {
-      console.log('🔄 Converting legacy field_service_days:', settingsData.field_service_days);
+      console.log('🔄 Converting legacy field_service_days');
 
       // Convert legacy format to new format with consistent defaults
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -249,7 +249,7 @@ export const useStorage = () => {
       setLoading(true);
       setError(null);
 
-      console.log('📥 Loading data for user:', user.id);
+      console.log('📥 Loading data');
 
       // Unsent work goes up before anything comes down
       const synced = await syncPendingChanges(user.id);
@@ -314,9 +314,9 @@ export const useStorage = () => {
       }
 
       if (settingsData) {
-        console.log('✅ Found existing settings in database:', settingsData);
+        console.log('✅ Found existing settings in database');
         const loadedSettings = parseSettingsFromDatabase(settingsData);
-        console.log('🎯 Parsed settings:', loadedSettings);
+        console.log('🎯 Parsed settings');
         setSettings(loadedSettings);
         writeCache(SETTINGS_CACHE, user.id, loadedSettings);
         settingsLoadedRef.current = true;
@@ -357,7 +357,7 @@ export const useStorage = () => {
     if (!user) return;
 
     try {
-      console.log('🆕 Creating default settings for user:', user.id);
+      console.log('🆕 Creating default settings');
       
       // Double-check that settings don't already exist
       const { data: existingSettings } = await supabase
@@ -372,7 +372,7 @@ export const useStorage = () => {
         return;
       }
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('user_settings')
         .insert({
           user_id: user.id,
@@ -394,7 +394,7 @@ export const useStorage = () => {
         throw error;
       }
       
-      console.log('✅ Default settings created successfully:', data);
+      console.log('✅ Default settings created successfully');
       setSettings(DEFAULT_SETTINGS);
       settingsLoadedRef.current = true;
     } catch (err: unknown) {

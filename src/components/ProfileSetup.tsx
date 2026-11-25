@@ -56,7 +56,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
         const previewUrl = URL.createObjectURL(file)
         setAvatarUrl(previewUrl)
       } else if (uploadedUrl) {
-        console.log('Avatar uploaded successfully:', uploadedUrl)
+        console.log('Avatar uploaded successfully')
         setAvatarUrl(uploadedUrl)
         setUploadSuccess(true)
         setError('')
@@ -78,7 +78,7 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ onComplete, onUploadAvatar,
   }
 
   const handleImageLoad = () => {
-    console.log('Profile preview image loaded successfully:', avatarUrl)
+    console.log('Profile preview image loaded successfully')
     setImageError(false)
   }
 

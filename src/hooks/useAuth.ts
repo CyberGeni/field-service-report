@@ -50,7 +50,7 @@ export function useAuth() {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email)
+        console.log('Auth state changed:', event)
         setSession(session)
         setUser(session?.user ?? null)
         setLoading(false)
@@ -63,28 +63,28 @@ export function useAuth() {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    console.log('Attempting sign in for:', email)
+    console.log('Attempting sign in')
     
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     })
 
-    console.log('Sign in result:', { data, error })
+    console.log('Sign in result:', error ? error.message : 'ok')
 
     // Return the result object - don't throw errors
     return { data, error }
   }
 
   const signUp = async (email: string, password: string) => {
-    console.log('Attempting sign up for:', email)
+    console.log('Attempting sign up')
     
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
     })
 
-    console.log('Sign up result:', { data, error })
+    console.log('Sign up result:', error ? error.message : 'ok')
 
     // Return the result object - don't throw errors
     return { data, error }
@@ -98,7 +98,7 @@ export function useAuth() {
   }
 
   const resetPassword = async (email: string) => {
-    console.log('Attempting password reset for:', email)
+    console.log('Attempting password reset')
     
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
