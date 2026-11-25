@@ -2,10 +2,21 @@ import { useState, useEffect } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 
+// The session as last seen by any screen. Every component calls this hook for itself,
+// and one opened later would otherwise start from "nobody signed in" until its own
+// check comes back - long enough to flash an empty list at someone who has plenty.
+// undefined until the first check finishes.
+let knownSession: Session | null | undefined
+
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null)
-  const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(() => knownSession?.user ?? null)
+  const [session, setSessionState] = useState<Session | null>(() => knownSession ?? null)
+  const [loading, setLoading] = useState(knownSession === undefined)
+
+  const setSession = (next: Session | null) => {
+    knownSession = next
+    setSessionState(next)
+  }
 
   useEffect(() => {
     // Get initial session

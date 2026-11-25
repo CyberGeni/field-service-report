@@ -1,11 +1,19 @@
-import React, { useState } from 'react';
-import { ServiceRecord, ServiceActivity, Settings, TimerState, Profile } from '../types';
-import { getDateString } from '../utils/dateUtils';
+import React, { useMemo, useState } from 'react';
+import { ChevronRight, Plus } from 'lucide-react';
+import { ServiceRecord, Settings, TimerState, Profile } from '../types';
+import { generateFieldServicePlan } from '../utils/calculations';
+import { getCurrentMonth, getDateString } from '../utils/dateUtils';
+import { getAvailableActivities } from '../utils/activityTypes';
 import { getDayOverride, getFieldDayOn } from '../utils/fieldDays';
-import { getAvailableActivities, getActivityMeta } from '../utils/activityTypes';
+import { formatPreferredDays, parseLocalDate, WEEKDAY_SHORT } from '../utils/people';
+import { useStudents } from '../hooks/useStudents';
+import { usePlanClock } from '../hooks/usePlanClock';
 import { useToast } from './ui/toast';
 import Timer from './Timer';
-import CreditEntryForm from './CreditEntryForm';
+import CreditSheet from './CreditSheet';
+import PersonSheet from './people/PersonSheet';
+import VisitTodayCard from './people/VisitTodayCard';
+import { PersonAvatar } from './people/PersonBits';
 
 interface LogTabProps {
   records: ServiceRecord[];
@@ -17,8 +25,14 @@ interface LogTabProps {
   onPauseTimer: () => void;
   onStopTimer: () => { totalTime: number; serviceType: 'h2h' | 'cart' };
   onSetServiceType: (type: 'h2h' | 'cart') => void;
+  onOpenPerson?: (personId: string) => void;
+  onOpenPeople?: () => void;
 }
 
+/**
+ * The screen used out in the field: the timer, a one-tap way to note someone just
+ * met, and who else to call on today.
+ */
 const LogTab: React.FC<LogTabProps> = ({
   records,
   settings,
@@ -28,155 +42,169 @@ const LogTab: React.FC<LogTabProps> = ({
   onStartTimer,
   onPauseTimer,
   onStopTimer,
-  onSetServiceType
+  onSetServiceType,
+  onOpenPerson,
+  onOpenPeople
 }) => {
+  usePlanClock();
   const { addToast } = useToast();
-  const activities = getAvailableActivities(profile);
+  const { students } = useStudents();
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [addingPerson, setAddingPerson] = useState(false);
 
-  // Preaching lives on the timer, which owns its type across tabs and reloads; a
-  // credit has no session to survive, so the choice of it is only this screen's.
-  const [creditActivity, setCreditActivity] = useState<ServiceActivity | null>(null);
-  const selectedType: ServiceActivity = creditActivity ?? timerState.serviceType;
+  const now = new Date();
+  const today = getDateString(now);
+  const dayOff = getDayOverride(settings, today);
+  const isDayOff = dayOff?.kind === 'off';
+  const canLogCredit = getAvailableActivities(profile).some(activity => !activity.timed);
 
-  // Turning volunteer status off while it was selected must not strand the tab on a
-  // form the user is no longer meant to see.
-  if (creditActivity && !activities.some(activity => activity.id === creditActivity)) {
-    setCreditActivity(null);
-  }
+  const running = timerState.isRunning && !timerState.isPaused;
+  const paused = timerState.isPaused;
 
-  const handleSelectActivity = (activity: ServiceActivity) => {
-    if (getActivityMeta(activity).timed) {
-      setCreditActivity(null);
-      onSetServiceType(activity as 'h2h' | 'cart');
-      return;
+  // The heading says what the user is doing, not what the calendar says they should be
+  const heading = running ? 'In the field' : paused ? 'Taking a break' : isDayOff ? 'Day off today' : 'Ready to go out?';
+
+  // What the plan asks of today. Past the evening cutoff, or once today has a record,
+  // the plan moves on to tomorrow - so fall back to the time set aside for today.
+  const plan = generateFieldServicePlan(records, settings, getCurrentMonth(), profile);
+  const targetHours =
+    plan.days.find(day => day.date === today)?.plannedHours ??
+    getFieldDayOn(settings, today)?.potentialHours ??
+    null;
+
+  // A field day in the last week with nothing logged against it is worth a nudge
+  const missedDay = useMemo(() => {
+    for (let back = 1; back <= 7; back++) {
+      const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() - back);
+      const date = getDateString(day);
+      if (getFieldDayOn(settings, date)) {
+        return records.some(record => record.date === date) ? null : day;
+      }
     }
-    setCreditActivity(activity);
-  };
+    return null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [records, settings, today]);
 
-  const today = new Date();
-  // Days off and one-off extra days count here exactly as they do in the plan
-  const isFieldDay = getFieldDayOn(settings, getDateString(today)) !== null;
-  const todayOff = getDayOverride(settings, getDateString(today));
-
-  // Find the most recent field service day (within the past 7 days)
-  const lastFieldServiceDay = new Date();
-  let daysBack = 1;
-  while (daysBack <= 7) {
-    const checkDate = new Date(today);
-    checkDate.setDate(checkDate.getDate() - daysBack);
-    if (getFieldDayOn(settings, getDateString(checkDate))) {
-      lastFieldServiceDay.setTime(checkDate.getTime());
-      break;
-    }
-    daysBack++;
-  }
-
-  const lastFieldServiceDateString = getDateString(lastFieldServiceDay);
-  const hasLoggedLastFieldDay = records.some(r => r.date === lastFieldServiceDateString);
+  // People added today, newest first
+  const metToday = useMemo(
+    () =>
+      students
+        .filter(person => person.date_met === today)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    [students, today]
+  );
 
   const handleTimerStop = () => {
     // Read the type back from the stopped session rather than from a render-time
-    // value, so the record always matches what was selected for that session.
+    // value, so the record always matches what was selected for that session
     const { totalTime, serviceType } = onStopTimer();
     const totalMinutes = Math.floor(totalTime / 60000);
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
 
     if (totalMinutes > 0) {
-      const timerRecord: ServiceRecord = {
-        id: crypto.randomUUID(),
-        date: getDateString(new Date()),
-        hours,
-        minutes,
-        type: serviceType,
-      };
-
-      onSaveRecord(timerRecord);
-
-      addToast({
-        type: 'success',
-        title: 'Time Logged',
-        description: `${hours}h ${minutes}m recorded for ${getDateString(new Date())}`
-      });
+      onSaveRecord({ id: crypto.randomUUID(), date: getDateString(new Date()), hours, minutes, type: serviceType });
+      addToast({ type: 'success', title: 'Time logged', description: `${hours}h ${minutes}m recorded for today` });
     } else {
-      addToast({
-        type: 'info',
-        title: 'Timer Stopped',
-        description: 'No time was recorded (timer was too short)'
-      });
+      addToast({ type: 'info', title: 'Timer stopped', description: 'Nothing was recorded - the timer ran for under a minute' });
     }
   };
 
-  const getStatusMessage = () => {
-    if (isFieldDay) {
-      return { message: "It's a field service day! Ready to log your time.", type: 'active' };
-    } else if (todayOff?.kind === 'off') {
-      return {
-        message: `You marked today as a day off${todayOff.note ? ` (${todayOff.note})` : ''} - its hours are spread over your other days.`,
-        type: 'complete'
-      };
-    } else if (!hasLoggedLastFieldDay && daysBack <= 7) {
-      return {
-        message: `Don't forget to log your hours from ${lastFieldServiceDay.toLocaleDateString()}`,
-        type: 'reminder'
-      };
-    } else {
-      return { message: 'Your records are up to date!', type: 'complete' };
-    }
+  const metSummary = (person: (typeof students)[number]) => {
+    const back = person.next_visit_date
+      ? `Back ${WEEKDAY_SHORT[parseLocalDate(person.next_visit_date).getDay()]}`
+      : formatPreferredDays(person.preferred_days)
+        ? `Usually ${formatPreferredDays(person.preferred_days)}`
+        : null;
+    return [back, person.preferred_time?.toLowerCase(), person.publication_left].filter(Boolean).join(' · ') || person.address;
   };
 
-  const status = getStatusMessage();
+  const addedAt = (person: (typeof students)[number]) => {
+    const created = new Date(person.created_at);
+    return Number.isNaN(created.getTime())
+      ? ''
+      : created.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Status Banner */}
-      <div className={`p-4 rounded-xl ${
-        status.type === 'active' ? 'bg-green-50 text-green-800' :
-        status.type === 'reminder' ? 'bg-yellow-50 text-yellow-800' :
-        'bg-blue-50 text-blue-800'
-      }`}>
-        <p className="font-medium">{status.message}</p>
+    <div className="space-y-4 -mx-2">
+      <div className="px-1 pt-1 space-y-1.5">
+        <p className="text-sm font-medium text-gray-600">
+          {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </p>
+        <h1 className="text-[28px] font-bold text-gray-800 font-libre-franklin tracking-tight">{heading}</h1>
+        {isDayOff && !running && !paused && (
+          <p className="text-sm text-gray-600">
+            You marked today off{dayOff?.note ? ` (${dayOff.note})` : ''}. Its hours are spread over your other days.
+          </p>
+        )}
+        {missedDay && !running && (
+          <p className="text-sm font-medium text-amber-700">
+            Nothing logged for {missedDay.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })} yet
+          </p>
+        )}
       </div>
 
-      {/* Service Type Selection */}
-      <div className="bg-white rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Service Type</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {activities.map(({ id, label, subtitle, icon: Icon, selectedCard, selectedIconBg }) => (
-            <button
-              key={id}
-              onClick={() => handleSelectActivity(id)}
-              className={`p-4 rounded-xl transition-all duration-200 border-2 text-left ${
-                selectedType === id
-                  ? selectedCard
-                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex flex-col items-center text-center space-y-2">
-                <div className={`p-2 rounded-lg ${selectedType === id ? selectedIconBg : 'bg-white'}`}>
-                  <Icon size={24} />
-                </div>
-                <div>
-                  <div className="font-semibold text-sm">{label}</div>
-                  <div className="text-xs opacity-75 mt-1">{subtitle}</div>
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+      <Timer
+        timerState={timerState}
+        onStart={onStartTimer}
+        onPause={onPauseTimer}
+        onStop={handleTimerStop}
+        onSetServiceType={onSetServiceType}
+        targetHours={targetHours}
+        onLogCredit={canLogCredit ? () => setCreditOpen(true) : undefined}
+      />
 
-      {/* Time is timed; credited hours are entered as the figure they were given as */}
-      {creditActivity ? (
-        <CreditEntryForm activity={creditActivity} onSaveRecord={onSaveRecord} />
-      ) : (
-        <Timer
-          timerState={timerState}
-          onStart={onStartTimer}
-          onPause={onPauseTimer}
-          onStop={handleTimerStop}
-        />
+      <button
+        type="button"
+        onClick={() => setAddingPerson(true)}
+        className="w-full flex items-center gap-3.5 bg-blue-600 hover:bg-blue-700 text-white rounded-[20px] px-[18px] py-4 text-left"
+      >
+        <span className="w-11 h-11 rounded-[14px] bg-white/20 flex items-center justify-center flex-shrink-0">
+          <Plus size={22} strokeWidth={2.2} aria-hidden="true" />
+        </span>
+        <span className="flex-1 flex flex-col gap-0.5">
+          <span className="text-[17px] font-semibold">Add a return visit</span>
+          <span className="text-sm text-blue-100">Someone you just spoke with</span>
+        </span>
+        <ChevronRight size={20} aria-hidden="true" />
+      </button>
+
+      <VisitTodayCard onOpenPerson={onOpenPerson} />
+
+      {metToday.length > 0 && (
+        <section aria-labelledby="met-today-title" className="bg-white rounded-[20px] px-4 py-[18px] shadow-sm">
+          <div className="flex items-baseline justify-between mb-1.5">
+            <h2 id="met-today-title" className="text-lg font-semibold text-gray-800 font-libre-franklin">Met today</h2>
+            {onOpenPeople && (
+              <button type="button" onClick={onOpenPeople} className="h-9 text-sm font-semibold text-blue-700">
+                All people
+              </button>
+            )}
+          </div>
+          <ul>
+            {metToday.map((person, index) => (
+              <li key={person.id} className={index < metToday.length - 1 ? 'border-b border-gray-100' : ''}>
+                <button
+                  type="button"
+                  onClick={onOpenPerson ? () => onOpenPerson(person.id) : undefined}
+                  className="w-full flex items-center gap-3 py-2.5 text-left"
+                >
+                  <PersonAvatar name={person.name} status={person.status} />
+                  <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <span className="text-[15px] font-semibold text-gray-800 truncate">{person.name}</span>
+                    <span className="text-sm text-gray-600 truncate">{metSummary(person)}</span>
+                  </span>
+                  <span className="text-[13px] text-gray-600 tabular-nums">{addedAt(person)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
+
+      <CreditSheet isOpen={creditOpen} onClose={() => setCreditOpen(false)} profile={profile} onSaveRecord={onSaveRecord} />
+      <PersonSheet isOpen={addingPerson} defaultStatus="return_visit" onClose={() => setAddingPerson(false)} />
     </div>
   );
 };

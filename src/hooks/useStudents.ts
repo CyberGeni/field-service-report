@@ -7,6 +7,7 @@ import { useToast } from '../components/ui/toast';
 import { readCache, writeCache } from '../utils/offlineCache';
 import { enqueueOperation, flushOutbox, readOutbox } from '../utils/offlineSync';
 import { getErrorMessage } from '../utils/errors';
+import { compressPhoto, forgetPhotoUrl, primePhotoUrl, removeLocalPhoto, savePhotoLocally } from '../utils/photoStore';
 
 /**
  * Everyone the user calls back on - return visits and Bible studies - and every call.
@@ -24,6 +25,7 @@ import { getErrorMessage } from '../utils/errors';
 const STUDENTS_CACHE = 'students';
 const VISITS_CACHE = 'studentVisits';
 const PEOPLE_OUTBOX = 'peopleOutbox';
+const PHOTO_OUTBOX = 'photoOutbox';
 
 // Supabase caps a select at 1,000 rows; years of weekly calls pass that
 const PAGE_SIZE = 1000;
@@ -82,6 +84,7 @@ const toStudent = (row: Row): Student => ({
     : [],
   preferred_time: optionalText(row.preferred_time),
   next_visit_date: optionalText(row.next_visit_date),
+  photo_path: optionalText(row.photo_path),
   created_at: String(row.created_at ?? ''),
   updated_at: String(row.updated_at ?? '')
 });
@@ -111,7 +114,8 @@ const studentRow = (student: Student): Row => ({
   status: student.status,
   preferred_days: student.preferred_days,
   preferred_time: student.preferred_time ?? null,
-  next_visit_date: student.next_visit_date ?? null
+  next_visit_date: student.next_visit_date ?? null,
+  photo_path: student.photo_path ?? null
 });
 
 const visitRow = (visit: StudentVisit): Row => ({
@@ -158,6 +162,11 @@ const queueAndSync = (userId: string, operations: Parameters<typeof enqueueOpera
   operations.forEach(operation => enqueueOperation(userId, operation, PEOPLE_OUTBOX));
   // Best effort: with no signal it simply waits in the queue for the next sync
   void flushOutbox(userId, PEOPLE_OUTBOX);
+};
+
+const queuePhotoAndSync = (userId: string, operation: Parameters<typeof enqueueOperation>[1]) => {
+  enqueueOperation(userId, operation, PHOTO_OUTBOX);
+  void flushOutbox(userId, PHOTO_OUTBOX);
 };
 
 type VisitChange =
@@ -251,6 +260,8 @@ const load = (userId: string): Promise<string | null> => {
 
     // Unsent changes go up before anything comes down: pulling the server's copy over
     // them would undo what the user did without a signal
+    // Photos go on their own; one stuck upload must not stop the list refreshing
+    void flushOutbox(userId, PHOTO_OUTBOX);
     const flush = await flushOutbox(userId, PEOPLE_OUTBOX);
     if (flush.failed) {
       setSnapshot({ loading: false });
@@ -405,12 +416,54 @@ export const useStudents = () => {
       snapshot.visits.filter(visit => visit.student_id !== id)
     );
     queueAndSync(userId, [{ kind: 'deleteStudent', studentId: id }]);
+    if (existing.photo_path) {
+      void removeLocalPhoto(existing.photo_path);
+      forgetPhotoUrl(existing.photo_path);
+      queuePhotoAndSync(userId, { kind: 'deletePhoto', path: existing.photo_path });
+    }
 
     addToast({
       type: 'success',
       title: 'Deleted',
       description: `${existing.name} has been removed from your people`
     });
+  };
+
+  /**
+   * Take a photo of where someone lives (or replace theirs). Shrunk and saved on the
+   * phone at once, so it shows straight away with or without a signal; the upload
+   * follows through the photo queue.
+   */
+  const setPhoto = async (personId: string, file: File) => {
+    const userId = requireUser();
+    const person = snapshot.students.find(student => student.id === personId);
+    if (!person) throw new Error('Person not found');
+
+    const photo = await compressPhoto(file);
+    const path = `${userId}/${personId}/${crypto.randomUUID()}.jpg`;
+    await savePhotoLocally(path, photo);
+    primePhotoUrl(path, photo);
+
+    queuePhotoAndSync(userId, { kind: 'uploadPhoto', path });
+    await updateStudent(personId, { photo_path: path }, { silent: true });
+
+    if (person.photo_path) {
+      void removeLocalPhoto(person.photo_path);
+      forgetPhotoUrl(person.photo_path);
+      queuePhotoAndSync(userId, { kind: 'deletePhoto', path: person.photo_path });
+    }
+  };
+
+  const removePhoto = async (personId: string) => {
+    const userId = requireUser();
+    const person = snapshot.students.find(student => student.id === personId);
+    if (!person?.photo_path) return;
+
+    const path = person.photo_path;
+    await updateStudent(personId, { photo_path: undefined }, { silent: true });
+    void removeLocalPhoto(path);
+    forgetPhotoUrl(path);
+    queuePhotoAndSync(userId, { kind: 'deletePhoto', path });
   };
 
   const loadStudentVisits = async (studentId: string): Promise<StudentVisit[]> =>
@@ -532,6 +585,8 @@ export const useStudents = () => {
     saveStudentVisit,
     updateStudentVisit,
     deleteStudentVisit,
+    setPhoto,
+    removePhoto,
     refetch
   };
 };

@@ -2,8 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BookOpen,
-  Calendar,
   CalendarClock,
+  ChevronRight,
   Clock,
   Edit,
   GraduationCap,
@@ -17,42 +17,28 @@ import {
 import { PersonStatus, Student, StudentVisit } from '../types';
 import { useStudents } from '../hooks/useStudents';
 import { getDateString } from '../utils/dateUtils';
-import { formatPreferredDays, formatShortDate, getDueReason, parseLocalDate } from '../utils/people';
+import {
+  formatPreferredDays,
+  formatShortDate,
+  getDueReason,
+  getPersonStatus,
+  parseLocalDate,
+  statusToneClass,
+  timeSince
+} from '../utils/people';
 import PersonSheet from './people/PersonSheet';
+import { PersonAvatar, PersonPhoto, PhotoField } from './people/PersonBits';
 import { useToast } from './ui/toast';
 
-// ── Dates ────────────────────────────────────────────────────────────────────
+// Read as local calendar days: `new Date('2026-11-26')` is UTC midnight, which west
+// of UTC is still the 25th and would print as the day before
+const formatDayMonth = (date: string) =>
+  parseLocalDate(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
 
-// Parsed as local calendar days: `new Date('2026-11-26')` is UTC midnight, which west
-// of UTC is still the 25th and would print as the day before.
-const formatLongDate = (date?: string) =>
-  date
-    ? parseLocalDate(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
-    : 'Never visited';
+const formatVisitDate = (date: string) =>
+  parseLocalDate(date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
-const timeSince = (date?: string): string | null => {
-  if (!date) return null;
-  const days = Math.round((parseLocalDate(getDateString(new Date())).getTime() - parseLocalDate(date).getTime()) / 86400000);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `${days} days ago`;
-  if (days < 14) return '1 week ago';
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-  if (days < 60) return '1 month ago';
-  return `${Math.floor(days / 30)} months ago`;
-};
-
-const statusLabel = (status: PersonStatus) => (status === 'study' ? 'Study' : 'Return visit');
-
-const StatusChip: React.FC<{ status: PersonStatus }> = ({ status }) => (
-  <span
-    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-      status === 'study' ? 'text-purple-700 bg-purple-100' : 'text-blue-700 bg-blue-100'
-    }`}
-  >
-    {statusLabel(status)}
-  </span>
-);
+const kindLabel = (status: PersonStatus) => (status === 'study' ? 'Bible study' : 'Return visit');
 
 /** "Wed & Sat · evening", or null when they gave no days or time. */
 const describeAvailability = (person: Student): string | null => {
@@ -60,17 +46,6 @@ const describeAvailability = (person: Student): string | null => {
   const time = person.preferred_time?.toLowerCase();
   if (days && time) return `${days} · ${time}`;
   return days ?? (time ? `Best in the ${time}` : null);
-};
-
-/** When they are next due, worded for the list. */
-const describeNext = (person: Student, today: string): { text: string; overdue: boolean } | null => {
-  const reason = getDueReason(person, today);
-  if (reason === 'overdue') return { text: `Overdue · was due ${formatShortDate(person.next_visit_date!)}`, overdue: true };
-  if (reason === 'promised' || reason === 'usualDay') return { text: 'Due today', overdue: false };
-  if (person.next_visit_date && person.next_visit_date > today) {
-    return { text: `Next visit ${formatShortDate(person.next_visit_date)}`, overdue: false };
-  }
-  return null;
 };
 
 // ── Record or edit a call ────────────────────────────────────────────────────
@@ -83,7 +58,7 @@ interface VisitModalProps {
 }
 
 const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit }) => {
-  const { saveStudentVisit, updateStudentVisit, updateStudent } = useStudents();
+  const { saveStudentVisit, updateStudentVisit, deleteStudentVisit, updateStudent } = useStudents();
   const today = getDateString(new Date());
   const [visitDate, setVisitDate] = useState(today);
   const [placeStopped, setPlaceStopped] = useState('');
@@ -112,7 +87,6 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
       setError('Pick the day of the visit');
       return;
     }
-
     try {
       if (visit) {
         await updateStudentVisit(visit.id, { visit_date: visitDate, place_stopped: placeStopped, notes });
@@ -129,40 +103,45 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
     }
   };
 
+  const handleDelete = async () => {
+    if (!visit || !window.confirm('Delete this visit?')) return;
+    await deleteStudentVisit(visit.id);
+    onClose();
+  };
+
   const inputClass =
-    'w-full p-3 bg-gray-50 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent';
+    'w-full h-12 px-3.5 bg-gray-50 rounded-xl border border-gray-300 text-base text-gray-800 placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div role="dialog" aria-modal="true" aria-labelledby="visit-modal-title" className="bg-white rounded-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 id="visit-modal-title" className="text-lg font-semibold text-gray-800">
-                {visit ? 'Edit visit' : 'Record visit'}
-              </h3>
-              <p className="text-sm text-gray-600">
-                {person.name} · {isStudy ? 'counts as a Bible study' : 'return visit'}
-              </p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close" className="p-2 hover:bg-gray-100 rounded-lg">
-              <X size={20} className="text-gray-600" />
-            </button>
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
+      <div role="dialog" aria-modal="true" aria-labelledby="visit-modal-title" className="bg-white w-full max-w-md rounded-t-3xl max-h-[92vh] flex flex-col animate-fadeIn">
+        <div className="flex justify-center pt-2">
+          <span className="w-10 h-1.5 rounded-full bg-gray-300" />
+        </div>
+        <div className="flex items-start justify-between pl-5 pr-3 pt-2">
+          <div>
+            <h2 id="visit-modal-title" className="text-xl font-bold text-gray-800 font-libre-franklin">
+              {visit ? 'Edit visit' : 'Record visit'}
+            </h2>
+            <p className="text-sm text-gray-600 mt-0.5">
+              {person.name} · {isStudy ? 'counts as a Bible study' : 'return visit'}
+            </p>
           </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100">
+            <X size={22} />
+          </button>
+        </div>
 
-          {error && (
-            <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-sm text-red-700">{error}</div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="visit-date" className="block text-sm font-medium text-gray-700 mb-2">Visit date</label>
+        <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
+          <div className="overflow-y-auto px-5 pt-4 pb-4 space-y-4">
+            {error && <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">{error}</div>}
+            <div className="space-y-1.5">
+              <label htmlFor="visit-date" className="block text-sm font-semibold text-gray-800">Visit date</label>
               <input id="visit-date" type="date" value={visitDate} max={today} onChange={e => setVisitDate(e.target.value)} className={inputClass} required />
             </div>
-
-            <div>
-              <label htmlFor="visit-place" className="block text-sm font-medium text-gray-700 mb-2">
-                {isStudy ? 'Where we stopped' : 'What you covered'}
+            <div className="space-y-1.5">
+              <label htmlFor="visit-place" className="block text-sm font-semibold text-gray-800">
+                {isStudy ? 'Where you stopped' : 'What you covered'}
               </label>
               <input
                 id="visit-place"
@@ -172,34 +151,33 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
                 placeholder={isStudy ? 'e.g. Lesson 12, point 3' : 'e.g. Read Psalm 37:29'}
               />
             </div>
-
-            <div>
-              <label htmlFor="visit-notes" className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+            <div className="space-y-1.5">
+              <label htmlFor="visit-notes" className="block text-sm font-semibold text-gray-800">Notes</label>
               <textarea
                 id="visit-notes"
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                className={`${inputClass} resize-none`}
-                rows={4}
+                rows={3}
+                className="w-full px-3.5 py-3 bg-gray-50 rounded-xl border border-gray-300 text-base text-gray-800 placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 placeholder="What you discussed, what to bring next time"
               />
             </div>
-
-            <div>
-              <label htmlFor="visit-next" className="block text-sm font-medium text-gray-700 mb-2">Next visit (optional)</label>
+            <div className="space-y-1.5">
+              <label htmlFor="visit-next" className="block text-sm font-semibold text-gray-800">Next visit (optional)</label>
               <input id="visit-next" type="date" value={nextVisit} min={today} onChange={e => setNextVisit(e.target.value)} className={inputClass} />
             </div>
-
-            <div className="flex space-x-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium">
-                Cancel
+          </div>
+          <div className="px-5 pt-3 pb-6 border-t border-gray-100 space-y-2">
+            <button type="submit" className="w-full h-[54px] rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-[17px] font-semibold">
+              {visit ? 'Save visit' : 'Record visit'}
+            </button>
+            {visit && (
+              <button type="button" onClick={handleDelete} className="w-full h-11 rounded-xl text-[15px] font-semibold text-red-600 hover:bg-red-50">
+                Delete this visit
               </button>
-              <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-xl font-medium">
-                {visit ? 'Save visit' : 'Record visit'}
-              </button>
-            </div>
-          </form>
-        </div>
+            )}
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -207,34 +185,27 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
 
 // ── Delete ───────────────────────────────────────────────────────────────────
 
-interface DeleteConfirmModalProps {
-  person: Student | null;
-  onClose: () => void;
-  onConfirm: () => void;
-}
-
-const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({ person, onClose, onConfirm }) => {
+const DeleteConfirmModal: React.FC<{ person: Student | null; onClose: () => void; onConfirm: () => void }> = ({
+  person,
+  onClose,
+  onConfirm
+}) => {
   if (!person) return null;
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div role="alertdialog" aria-modal="true" aria-labelledby="delete-title" className="bg-white rounded-xl max-w-sm w-full p-6">
-        <div className="flex items-center space-x-3 mb-4">
+      <div role="alertdialog" aria-modal="true" aria-labelledby="delete-title" className="bg-white rounded-2xl max-w-sm w-full p-6">
+        <div className="flex items-center gap-3 mb-4">
           <div className="bg-red-100 p-2 rounded-lg">
             <Trash2 size={20} className="text-red-600" />
           </div>
-          <h3 id="delete-title" className="text-lg font-semibold text-gray-800">Delete {statusLabel(person.status).toLowerCase()}</h3>
+          <h3 id="delete-title" className="text-lg font-semibold text-gray-800">Delete {kindLabel(person.status).toLowerCase()}</h3>
         </div>
         <p className="text-gray-600 mb-6">
           Delete <strong>{person.name}</strong> and every visit recorded with them? This cannot be undone.
         </p>
-        <div className="flex space-x-3">
-          <button onClick={onClose} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-4 rounded-xl font-medium">
-            Cancel
-          </button>
-          <button onClick={onConfirm} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 px-4 rounded-xl font-medium">
-            Delete
-          </button>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 h-12 rounded-xl font-semibold">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 bg-red-600 hover:bg-red-700 text-white h-12 rounded-xl font-semibold">Delete</button>
         </div>
       </div>
     </div>
@@ -252,10 +223,21 @@ interface PersonDetailsProps {
   onEditVisit: (visit: StudentVisit) => void;
 }
 
+const InfoRow: React.FC<{ icon: React.ReactNode; label: string; children: React.ReactNode }> = ({ icon, label, children }) => (
+  <div className="flex items-start gap-3">
+    <span className="text-gray-500 mt-0.5 flex-shrink-0">{icon}</span>
+    <span className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[13px] font-semibold text-gray-500">{label}</span>
+      <span className="text-[15px] text-gray-800 break-words">{children}</span>
+    </span>
+  </div>
+);
+
 const PersonDetails: React.FC<PersonDetailsProps> = ({ person, onBack, onEdit, onDelete, onRecordVisit, onEditVisit }) => {
-  const { visits, updateStudent, deleteStudentVisit } = useStudents();
+  const { visits, updateStudent, setPhoto, removePhoto } = useStudents();
   const { addToast } = useToast();
   const today = getDateString(new Date());
+  const isStudy = person.status === 'study';
   const theirVisits = useMemo(
     () =>
       visits
@@ -263,174 +245,158 @@ const PersonDetails: React.FC<PersonDetailsProps> = ({ person, onBack, onEdit, o
         .sort((a, b) => b.visit_date.localeCompare(a.visit_date) || b.created_at.localeCompare(a.created_at)),
     [visits, person.id]
   );
+
+  const reason = getDueReason(person, today);
   const availability = describeAvailability(person);
-  const next = describeNext(person, today);
-  const since = timeSince(person.last_visit_date);
-  const isStudy = person.status === 'study';
+  const since = timeSince(person.last_visit_date, today);
+
+  // The box at the top says whether to go today, and why - or when they are next due
+  const dueBox =
+    reason === 'overdue'
+      ? { tone: 'bg-amber-50 text-amber-800', text: `Overdue · was due ${formatShortDate(person.next_visit_date!)}` }
+      : reason === 'promised'
+        ? { tone: 'bg-blue-50 text-blue-800', text: 'Due today · they asked you to come back today' }
+        : reason === 'usualDay'
+          ? { tone: 'bg-blue-50 text-blue-800', text: `Due today · usually home today${person.preferred_time ? `, ${person.preferred_time.toLowerCase()}` : ''}` }
+          : person.next_visit_date && person.next_visit_date > today
+            ? { tone: 'bg-gray-50 text-gray-700', text: `Next visit ${formatShortDate(person.next_visit_date)}` }
+            : null;
+
+  const startStudy = async () => {
+    await updateStudent(person.id, { status: 'study' }, { silent: true });
+    addToast({ type: 'success', title: 'Study started', description: `${person.name} is now one of your Bible studies` });
+  };
+
+  const takePhoto = async (file: File) => {
+    try {
+      await setPhoto(person.id, file);
+    } catch (err) {
+      console.error('Could not save photo:', err);
+      addToast({ type: 'error', title: 'Photo not saved', description: 'That photo could not be used. Please try another.' });
+    }
+  };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-xl p-5">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <button onClick={onBack} aria-label="Back to people" className="p-2 -ml-2 hover:bg-gray-100 rounded-lg">
-              <ArrowLeft size={20} className="text-gray-600" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold text-gray-800 truncate font-libre-franklin">{person.name}</h1>
-              <StatusChip status={person.status} />
-            </div>
-          </div>
-          <div className="flex">
-            <button onClick={onEdit} aria-label={`Edit ${person.name}`} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-lg">
-              <Edit size={18} />
-            </button>
-            <button onClick={onDelete} aria-label={`Delete ${person.name}`} className="p-2.5 text-red-600 hover:bg-red-50 rounded-lg">
-              <Trash2 size={18} />
-            </button>
-          </div>
-        </div>
+    <div className="space-y-4 -mt-4">
+      <div className="flex items-center justify-between -mx-2">
+        <button onClick={onBack} aria-label="Back to people" className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-700 hover:bg-gray-200">
+          <ArrowLeft size={22} />
+        </button>
+        <span className="flex">
+          <button onClick={onEdit} aria-label={`Edit ${person.name}`} className="w-11 h-11 flex items-center justify-center rounded-xl text-blue-700 hover:bg-blue-50">
+            <Edit size={20} />
+          </button>
+          <button onClick={onDelete} aria-label={`Delete ${person.name}`} className="w-11 h-11 flex items-center justify-center rounded-xl text-red-600 hover:bg-red-50">
+            <Trash2 size={20} />
+          </button>
+        </span>
+      </div>
 
+      <div className="flex items-center gap-3.5 px-1">
+        <PersonAvatar name={person.name} status={person.status} size="lg" />
+        <div className="min-w-0 flex flex-col gap-1 items-start">
+          <h1 className="text-[26px] leading-tight font-bold text-gray-800 font-libre-franklin break-words">{person.name}</h1>
+          <span className={`text-[13px] font-semibold px-2.5 py-0.5 rounded-full ${isStudy ? 'text-purple-700 bg-purple-100' : 'text-blue-700 bg-blue-100'}`}>
+            {kindLabel(person.status)}
+          </span>
+        </div>
+      </div>
+
+      <section className="bg-white rounded-2xl p-4 space-y-3.5 shadow-sm">
+        {dueBox && (
+          <p className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[15px] font-semibold ${dueBox.tone}`}>
+            <CalendarClock size={18} className="flex-shrink-0" aria-hidden="true" />
+            {dueBox.text}
+          </p>
+        )}
         <div className={`grid gap-2 ${isStudy ? 'grid-cols-1' : 'grid-cols-2'}`}>
-          <button
-            onClick={onRecordVisit}
-            className="bg-green-600 hover:bg-green-700 text-white h-12 px-4 rounded-xl font-semibold flex items-center justify-center gap-2"
-          >
-            <Plus size={20} />
+          <button onClick={onRecordVisit} className="h-12 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-semibold flex items-center justify-center gap-2">
+            <Plus size={18} />
             Record visit
           </button>
           {/* The step this whole feature exists for: a return visit who starts studying
               keeps their history rather than being re-entered */}
           {!isStudy && (
-            <button
-              onClick={async () => {
-                await updateStudent(person.id, { status: 'study' }, { silent: true });
-                addToast({ type: 'success', title: 'Study started', description: `${person.name} is now one of your Bible studies` });
-              }}
-              className="bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 h-12 px-4 rounded-xl font-semibold flex items-center justify-center gap-2"
-            >
-              <GraduationCap size={20} />
+            <button onClick={startStudy} className="h-12 rounded-2xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 font-semibold flex items-center justify-center gap-2">
+              <GraduationCap size={18} />
               Start a study
             </button>
           )}
         </div>
-      </div>
+      </section>
 
-      <div className="bg-white rounded-xl p-5 space-y-4">
-        {next && (
-          <div className="flex items-start gap-3">
-            <CalendarClock size={16} className={`mt-0.5 flex-shrink-0 ${next.overdue ? 'text-amber-600' : 'text-gray-500'}`} />
-            <p className={`text-sm font-semibold ${next.overdue ? 'text-amber-700' : 'text-gray-800'}`}>{next.text}</p>
-          </div>
-        )}
-        <div className="flex items-start gap-3">
-          <MapPin size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-gray-700">Where</p>
-            <p className="text-sm text-gray-600">{person.address || 'No address yet'}</p>
-          </div>
-        </div>
-        {availability && (
-          <div className="flex items-start gap-3">
-            <Clock size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">Usually home</p>
-              <p className="text-sm text-gray-600">{availability}</p>
-            </div>
-          </div>
-        )}
+      <section className="bg-white rounded-2xl p-4 space-y-4 shadow-sm">
+        {person.photo_path && <PersonPhoto path={person.photo_path} className="w-full h-44 rounded-xl" />}
+        <PhotoField
+          path={person.photo_path}
+          pending={null}
+          variant={person.photo_path ? 'actions' : 'full'}
+          onPick={takePhoto}
+          onRemove={() => removePhoto(person.id)}
+        />
+        <InfoRow icon={<MapPin size={18} />} label="Where">
+          {person.address || <span className="text-gray-500">No address yet</span>}
+        </InfoRow>
+        {availability && <InfoRow icon={<Clock size={18} />} label="Usually home">{availability}</InfoRow>}
         {person.publication_left && (
-          <div className="flex items-start gap-3">
-            <BookOpen size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">{isStudy ? 'Studying' : 'Publication left with them'}</p>
-              <p className="text-sm text-gray-600">{person.publication_left}</p>
-            </div>
-          </div>
+          <InfoRow icon={<BookOpen size={18} />} label={isStudy ? 'Studying' : 'Publication left with them'}>
+            {person.publication_left}
+          </InfoRow>
         )}
         {person.place_stopped && (
-          <div className="flex items-start gap-3">
-            <BookOpen size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">{isStudy ? 'Up to' : 'Last covered'}</p>
-              <p className="text-sm text-gray-600">{person.place_stopped}</p>
-            </div>
-          </div>
+          <InfoRow icon={<BookOpen size={18} />} label={isStudy ? 'Up to' : 'Last covered'}>{person.place_stopped}</InfoRow>
         )}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex items-start gap-3">
-            <Calendar size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">Met</p>
-              <p className="text-sm text-gray-600">{formatLongDate(person.date_met)}</p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <Clock size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-gray-700">Last visit</p>
-              <p className="text-sm text-gray-600">
-                {formatLongDate(person.last_visit_date)}
-                {since && <span className="block text-gray-500">{since}</span>}
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-2 gap-3 pt-3.5 border-t border-gray-100">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-semibold text-gray-500">Met</span>
+            <span className="text-[15px] text-gray-800">{formatDayMonth(person.date_met)}</span>
+          </span>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-semibold text-gray-500">Last visit</span>
+            <span className="text-[15px] text-gray-800">{person.last_visit_date ? formatDayMonth(person.last_visit_date) : 'Not yet'}</span>
+            {since && <span className="text-[13px] text-gray-500">{since}</span>}
+          </span>
         </div>
-        {person.last_study_notes && (
-          <div className="pt-4 border-t border-gray-100">
-            <p className="text-sm font-medium text-gray-700 mb-1">Latest notes</p>
-            <p className="text-sm text-gray-600 whitespace-pre-line">{person.last_study_notes}</p>
-          </div>
-        )}
-      </div>
+      </section>
 
-      <div className="bg-white rounded-xl p-5">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Visits</h2>
-        {theirVisits.length > 0 ? (
-          <ul className="space-y-3">
-            {theirVisits.map(visit => (
-              <li key={visit.id} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-gray-800">
-                      {parseLocalDate(visit.visit_date).toLocaleDateString('en-GB', {
-                        weekday: 'long',
-                        day: 'numeric',
-                        month: 'long',
-                        year: 'numeric'
-                      })}
-                    </p>
-                    <p className="text-xs font-semibold text-gray-500 mt-0.5">
-                      {visit.is_study ? 'Bible study' : 'Return visit'}
-                    </p>
-                    {visit.place_stopped && <p className="text-sm text-gray-600 mt-1">{visit.place_stopped}</p>}
-                  </div>
-                  <div className="flex flex-shrink-0">
-                    <button onClick={() => onEditVisit(visit)} aria-label="Edit visit" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (window.confirm('Delete this visit?')) deleteStudentVisit(visit.id);
-                      }}
-                      aria-label="Delete visit"
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-                {visit.notes && <p className="mt-3 p-3 bg-white rounded-lg text-sm text-gray-700 whitespace-pre-line">{visit.notes}</p>}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="text-center py-8 text-gray-500">
-            <Calendar size={40} className="mx-auto mb-3 opacity-50" />
-            <p className="font-medium">No visits recorded yet</p>
-          </div>
-        )}
-      </div>
+      {person.last_study_notes && (
+        <section className="bg-white rounded-2xl p-4 space-y-2 shadow-sm">
+          <h2 className="text-[17px] font-semibold text-gray-800 font-libre-franklin">Latest notes</h2>
+          <p className="text-[15px] leading-[22px] text-gray-700 whitespace-pre-line">{person.last_study_notes}</p>
+        </section>
+      )}
+
+      <section className="bg-white rounded-2xl p-4 shadow-sm">
+        <h2 className="text-[17px] font-semibold text-gray-800 font-libre-franklin mb-2">Visits</h2>
+        <ul>
+          {theirVisits.map((visit, index) => (
+            <li key={visit.id} className="border-b border-gray-100">
+              <button onClick={() => onEditVisit(visit)} className="w-full text-left flex gap-3 py-2.5 hover:bg-gray-50 rounded-lg">
+                <span className={`w-2.5 h-2.5 mt-1.5 rounded-full flex-shrink-0 ${index === 0 ? 'bg-blue-600' : 'bg-gray-300'}`} aria-hidden="true" />
+                <span className="flex-1 min-w-0 flex flex-col gap-1">
+                  <span className="flex justify-between gap-2">
+                    <span className="text-[15px] font-semibold text-gray-800">{formatVisitDate(visit.visit_date)}</span>
+                    <span className="text-[13px] text-gray-500 flex-shrink-0">{visit.is_study ? 'Bible study' : 'Return visit'}</span>
+                  </span>
+                  {(visit.place_stopped || visit.notes) && (
+                    <span className="text-sm leading-5 text-gray-600 whitespace-pre-line">
+                      {[visit.place_stopped, visit.notes].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          ))}
+          {/* Where the history starts */}
+          <li className="flex gap-3 py-2.5">
+            <span className="w-2.5 h-2.5 mt-1.5 rounded-full flex-shrink-0 bg-gray-300" aria-hidden="true" />
+            <span className="flex-1 flex justify-between gap-2">
+              <span className="text-[15px] font-semibold text-gray-800">{formatVisitDate(person.date_met)}</span>
+              <span className="text-[13px] text-gray-500">First met</span>
+            </span>
+          </li>
+        </ul>
+      </section>
     </div>
   );
 };
@@ -450,7 +416,9 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
   const studies = students.filter(person => person.status === 'study');
 
   // Open on return visits once there are any - they are what gets added most
-  const [segment, setSegment] = useState<PersonStatus>(() => (returnVisits.length > 0 || studies.length === 0 ? 'return_visit' : 'study'));
+  const [segment, setSegment] = useState<PersonStatus>(() =>
+    returnVisits.length > 0 || studies.length === 0 ? 'return_visit' : 'study'
+  );
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sheet, setSheet] = useState<{ person: Student | null } | null>(null);
@@ -471,7 +439,6 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
 
   const selected = selectedId ? students.find(person => person.id === selectedId) ?? null : null;
 
-  const query = search.trim().toLowerCase();
   // Whoever needs a call soonest first: overdue, due today, then by the date they
   // gave, and everyone with no date in name order after them
   const urgency = (person: Student): string => {
@@ -480,6 +447,7 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
     if (reason) return '1';
     return person.next_visit_date && person.next_visit_date > today ? `2${person.next_visit_date}` : '3';
   };
+  const query = search.trim().toLowerCase();
   const shown = (segment === 'study' ? studies : returnVisits)
     .filter(person =>
       !query ||
@@ -504,6 +472,13 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
     );
   }
 
+  const lastLine = (person: Student) => {
+    const since = timeSince(person.last_visit_date, today);
+    if (since) return `Last ${person.status === 'study' ? 'study' : 'visit'} ${since}`;
+    const met = timeSince(person.date_met, today);
+    return met === 'today' ? 'Met today' : `Met ${met}`;
+  };
+
   return (
     <div className="space-y-4">
       {selected ? (
@@ -517,12 +492,12 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
         />
       ) : (
         <>
-          <div className="pt-2 pb-1">
-            <h1 className="text-3xl font-bold text-gray-800 font-libre-franklin">People</h1>
-            <p className="text-gray-600">Return visits and Bible studies</p>
+          <div className="pt-2 space-y-1">
+            <h1 className="text-[28px] font-bold text-gray-800 font-libre-franklin tracking-tight">People</h1>
+            <p className="text-[15px] text-gray-600">Return visits and Bible studies</p>
           </div>
 
-          <div role="group" aria-label="Show" className="grid grid-cols-2 gap-1 bg-gray-200/70 p-1 rounded-xl">
+          <div role="group" aria-label="Show" className="grid grid-cols-2 gap-1 bg-gray-200 p-1 rounded-2xl">
             {(['return_visit', 'study'] as PersonStatus[]).map(status => {
               const count = status === 'study' ? studies.length : returnVisits.length;
               const on = segment === status;
@@ -531,9 +506,19 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
                   key={status}
                   aria-pressed={on}
                   onClick={() => setSegment(status)}
-                  className={`h-11 rounded-lg text-[15px] font-semibold ${on ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600'}`}
+                  className={`h-11 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 ${
+                    on ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600'
+                  }`}
                 >
-                  {status === 'study' ? 'Studies' : 'Return visits'} <span className="text-gray-500 font-medium">{count}</span>
+                  {status === 'study' ? 'Studies' : 'Return visits'}
+                  {/* In its own pill, so the count never reads as part of the label */}
+                  <span
+                    className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center tabular-nums ${
+                      on ? 'bg-blue-100 text-blue-700' : 'bg-gray-300 text-gray-700'
+                    }`}
+                  >
+                    {count}
+                  </span>
                 </button>
               );
             })}
@@ -548,12 +533,12 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search name, place or notes"
-                className="w-full h-12 pl-10 pr-3 bg-white rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full h-12 pl-10 pr-3 bg-white rounded-2xl border border-gray-300 text-base focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <button
               onClick={() => setSheet({ person: null })}
-              className="bg-blue-600 hover:bg-blue-700 text-white h-12 px-4 rounded-xl font-semibold flex items-center gap-1.5"
+              className="bg-blue-600 hover:bg-blue-700 text-white h-12 px-4 rounded-2xl font-semibold flex items-center gap-1.5"
             >
               <Plus size={20} />
               Add
@@ -563,49 +548,39 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
           {shown.length > 0 ? (
             <ul className="space-y-3">
               {shown.map(person => {
-                const availability = describeAvailability(person);
-                const next = describeNext(person, today);
-                const since = timeSince(person.last_visit_date);
+                const status = getPersonStatus(person, today);
+                const bookLine =
+                  person.status === 'study' && person.place_stopped
+                    ? [person.publication_left, person.place_stopped].filter(Boolean).join(' · ')
+                    : person.publication_left;
                 return (
                   <li key={person.id}>
                     <button
                       onClick={() => setSelectedId(person.id)}
-                      className="w-full text-left bg-white rounded-xl p-4 hover:shadow-md transition-shadow space-y-1.5"
+                      className="w-full text-left bg-white rounded-2xl p-4 flex flex-col gap-3.5 shadow-sm hover:shadow-md transition-shadow"
                     >
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="text-lg font-semibold text-gray-800 truncate">{person.name}</span>
-                        {next && (
-                          <span
-                            className={`flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              next.overdue ? 'text-amber-800 bg-amber-100' : 'text-gray-700 bg-gray-100'
-                            }`}
-                          >
-                            {next.text}
+                      <span className="flex items-center gap-3 w-full">
+                        <PersonAvatar name={person.name} status={person.status} />
+                        <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                          <span className="text-base font-semibold text-gray-800 truncate">{person.name}</span>
+                          <span className={`text-sm truncate ${statusToneClass(status.tone)}`}>{status.text}</span>
+                        </span>
+                        <ChevronRight size={20} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
+                      </span>
+                      <span className="ml-[52px] pt-3 border-t border-gray-100 flex flex-col gap-2">
+                        {person.address && (
+                          <span className="flex items-start gap-2 text-sm leading-5 text-gray-700">
+                            <MapPin size={16} className="text-gray-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                            {person.address}
                           </span>
                         )}
-                      </span>
-                      {person.address && (
-                        <span className="flex items-center gap-2 text-sm text-gray-600">
-                          <MapPin size={14} className="flex-shrink-0" aria-hidden="true" />
-                          <span className="truncate">{person.address}</span>
-                        </span>
-                      )}
-                      {availability && (
-                        <span className="flex items-center gap-2 text-sm text-gray-600">
-                          <Clock size={14} className="flex-shrink-0" aria-hidden="true" />
-                          {availability}
-                        </span>
-                      )}
-                      {(person.place_stopped || person.publication_left) && (
-                        <span className="flex items-center gap-2 text-sm text-gray-600">
-                          <BookOpen size={14} className="flex-shrink-0" aria-hidden="true" />
-                          <span className="truncate">
-                            {person.status === 'study' && person.place_stopped ? `Up to ${person.place_stopped}` : person.publication_left}
+                        {bookLine && (
+                          <span className="flex items-start gap-2 text-sm leading-5 text-gray-700">
+                            <BookOpen size={16} className="text-gray-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                            {bookLine}
                           </span>
-                        </span>
-                      )}
-                      <span className="block text-sm text-gray-500">
-                        {since ? `Last visit ${since}` : `Met ${formatShortDate(person.date_met)}`}
+                        )}
+                        <span className="text-[13px] text-gray-500">{lastLine(person)}</span>
                       </span>
                     </button>
                   </li>
@@ -613,8 +588,8 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
               })}
             </ul>
           ) : (
-            <div className="bg-white rounded-xl p-8 text-center">
-              <Users size={56} className="mx-auto mb-4 text-gray-400 opacity-60" />
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
+              <Users size={48} className="mx-auto mb-4 text-gray-400" aria-hidden="true" />
               {query ? (
                 <>
                   <h3 className="text-lg font-semibold text-gray-700 mb-2">Nobody matches “{search}”</h3>
@@ -629,7 +604,7 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
                 <>
                   <h3 className="text-lg font-semibold text-gray-700 mb-2">No return visits yet</h3>
                   <p className="text-gray-600 mb-4">Add people you meet in the ministry who you want to see again.</p>
-                  <button onClick={() => setSheet({ person: null })} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold">
+                  <button onClick={() => setSheet({ person: null })} className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-12 rounded-2xl font-semibold">
                     Add a return visit
                   </button>
                 </>
@@ -639,20 +614,10 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
         </>
       )}
 
-      <PersonSheet
-        isOpen={sheet !== null}
-        person={sheet?.person}
-        defaultStatus={segment}
-        onClose={() => setSheet(null)}
-      />
+      <PersonSheet isOpen={sheet !== null} person={sheet?.person} defaultStatus={segment} onClose={() => setSheet(null)} />
 
       {selected && (
-        <VisitModal
-          isOpen={visitModal !== null}
-          person={selected}
-          visit={visitModal?.visit}
-          onClose={() => setVisitModal(null)}
-        />
+        <VisitModal isOpen={visitModal !== null} person={selected} visit={visitModal?.visit} onClose={() => setVisitModal(null)} />
       )}
 
       <DeleteConfirmModal person={toDelete} onClose={() => setToDelete(null)} onConfirm={confirmDelete} />

@@ -106,3 +106,62 @@ export const nextWeekday = (date: string, weekday: number): string => {
   const gap = (weekday - weekdayOf(date) + 7) % 7 || 7;
   return addDays(date, gap);
 };
+
+export type StatusTone = 'overdue' | 'today' | 'plain';
+
+/** "Mon" for a date in the last week, "12 Nov" for anything older. */
+const sinceLabel = (date: string, today: string): string => {
+  const days = Math.round((parseLocalDate(today).getTime() - parseLocalDate(date).getTime()) / 86400000);
+  return days <= 6
+    ? WEEKDAY_SHORT[parseLocalDate(date).getDay()]
+    : parseLocalDate(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+};
+
+/**
+ * The one line that says where someone stands, worded the same on every screen:
+ * overdue, due today (and why), the next agreed visit, or the days they are usually
+ * home - in that order of importance.
+ */
+export const getPersonStatus = (person: Student, today: string): { text: string; tone: StatusTone } => {
+  const reason = getDueReason(person, today);
+  const time = person.preferred_time?.toLowerCase();
+
+  if (reason === 'overdue') return { text: `Overdue since ${sinceLabel(person.next_visit_date!, today)}`, tone: 'overdue' };
+  if (reason === 'promised') return { text: 'Due today · asked for today', tone: 'today' };
+  if (reason === 'usualDay') return { text: `Due today${time ? ` · usually ${time}` : ''}`, tone: 'today' };
+  if (person.next_visit_date && person.next_visit_date > today) {
+    return { text: `Next visit ${formatShortDate(person.next_visit_date)}`, tone: 'plain' };
+  }
+
+  const days = formatPreferredDays(person.preferred_days);
+  if (days) return { text: `Usually ${days}${time ? ` · ${time}` : ''}`, tone: 'plain' };
+  if (time) return { text: `Best in the ${time}`, tone: 'plain' };
+  return { text: person.status === 'study' ? 'No study day set' : 'No visit planned', tone: 'plain' };
+};
+
+/** "MB" for Mrs. Bello, "D" for Daniel - the letters on a person's avatar. */
+export const getInitials = (name: string): string => {
+  const words = name
+    .replace(/^(mr|mrs|ms|miss|dr|bro|sis)\.?\s+/i, match => (name.trim().split(/\s+/).length > 1 ? match : ''))
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.slice(0, 2).map(word => word[0]!.toUpperCase()).join('') || '?';
+};
+
+/** How long ago a date was, in words: "today", "yesterday", "3 days ago", "2 weeks ago". */
+export const timeSince = (date: string | undefined, today: string): string | null => {
+  if (!date) return null;
+  const days = Math.round((parseLocalDate(today).getTime() - parseLocalDate(date).getTime()) / 86400000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  if (days < 14) return '1 week ago';
+  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (days < 60) return '1 month ago';
+  return `${Math.floor(days / 30)} months ago`;
+};
+
+/** Text colour for a status line: amber when overdue, blue when due today. */
+export const statusToneClass = (tone: StatusTone) =>
+  tone === 'overdue' ? 'text-amber-700 font-semibold' : tone === 'today' ? 'text-blue-700 font-semibold' : 'text-gray-600';

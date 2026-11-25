@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { PersonStatus, Student, StudentInput } from '../../types';
 import { useStudents } from '../../hooks/useStudents';
+import { PhotoField } from './PersonBits';
 import { getDateString } from '../../utils/dateUtils';
 import {
   WEEKDAYS,
@@ -92,7 +93,10 @@ const inputClass =
  * once they apply.
  */
 const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defaultStatus = 'return_visit', onSaved }) => {
-  const { students, saveStudent, updateStudent } = useStudents();
+  const { students, saveStudent, updateStudent, setPhoto, removePhoto } = useStudents();
+  // A photo taken here is kept aside until Save, so closing the sheet throws it away
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const [form, setForm] = useState<FormState>(() => emptyForm(defaultStatus));
   const [pickingDate, setPickingDate] = useState(false);
   const [error, setError] = useState('');
@@ -114,6 +118,8 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
     setPickingDate(false);
     setError('');
     setSaving(false);
+    setPendingPhoto(null);
+    setPhotoRemoved(false);
     // Straight to the name: at a door every second counts
     if (!person) setTimeout(() => nameRef.current?.focus(), 50);
     // Only on opening - re-running when the list of people changes would wipe the form
@@ -180,6 +186,12 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
         last_visit_date: form.last_visit_date
       };
       const saved = person ? await updateStudent(person.id, input) : await saveStudent(input);
+      if (pendingPhoto) {
+        // Never lose the person over a photo that could not be processed
+        await setPhoto(saved.id, pendingPhoto).catch(err => console.error('Could not save photo:', err));
+      } else if (photoRemoved) {
+        await removePhoto(saved.id);
+      }
       onSaved?.(saved);
       onClose();
     } catch (err) {
@@ -265,6 +277,20 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
                 className={inputClass}
                 placeholder="Street, flat number or a landmark"
               />
+              <div className="pt-1">
+                <PhotoField
+                  path={photoRemoved ? undefined : person?.photo_path}
+                  pending={pendingPhoto}
+                  onPick={file => {
+                    setPendingPhoto(file);
+                    setPhotoRemoved(false);
+                  }}
+                  onRemove={() => {
+                    setPendingPhoto(null);
+                    setPhotoRemoved(true);
+                  }}
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">

@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { ServiceRecord } from '../types';
 import { readCache, writeCache } from './offlineCache';
+import { PHOTO_BUCKET, readLocalPhoto } from './photoStore';
 
 /**
  * A change made on the device that Supabase has not accepted yet.
@@ -21,7 +22,10 @@ export type PendingOperation =
   | { id: string; kind: 'upsertStudent'; row: Record<string, unknown> }
   | { id: string; kind: 'deleteStudent'; studentId: string }
   | { id: string; kind: 'upsertStudentVisit'; row: Record<string, unknown> }
-  | { id: string; kind: 'deleteStudentVisit'; visitId: string };
+  | { id: string; kind: 'deleteStudentVisit'; visitId: string }
+  // Photos: the bytes wait on the phone (IndexedDB), so only the path is queued
+  | { id: string; kind: 'uploadPhoto'; path: string }
+  | { id: string; kind: 'deletePhoto'; path: string };
 
 /**
  * Two queues, each replayed in order on its own.
@@ -31,9 +35,11 @@ export type PendingOperation =
  * behind it - and the hours on a report must never wait on a return visit's notes. So
  * people and their calls queue separately from hours, settings and reports.
  */
-export type OutboxName = 'outbox' | 'peopleOutbox';
+export type OutboxName = 'outbox' | 'peopleOutbox' | 'photoOutbox';
 
-const OUTBOX_NAMES: OutboxName[] = ['outbox', 'peopleOutbox'];
+// Photos get a queue of their own too: an upload is big, slow and the likeliest thing
+// to fail on a weak signal, and a person's notes should not wait behind it.
+const OUTBOX_NAMES: OutboxName[] = ['outbox', 'peopleOutbox', 'photoOutbox'];
 
 export const readOutbox = (userId: string, name: OutboxName = 'outbox'): PendingOperation[] =>
   readCache<PendingOperation[]>(name, userId) || [];
@@ -157,11 +163,23 @@ const applyOperation = async (userId: string, operation: PendingOperation): Prom
       return;
     }
     case 'upsertStudent': {
-      const { error } = await supabase
-        .from('students')
-        .upsert({ ...operation.row, user_id: userId }, { onConflict: 'id' });
-      if (error) throw error;
-      return;
+      const save = (row: Record<string, unknown>) =>
+        supabase.from('students').upsert({ ...row, user_id: userId }, { onConflict: 'id' });
+
+      const { error } = await save(operation.row);
+      if (!error) return;
+
+      // A database without the photo column yet still takes everything else about the
+      // person; the photo stays on the phone until the column is there
+      if ('photo_path' in operation.row && /photo_path/.test(`${error.message} ${error.details ?? ''}`)) {
+        console.warn('students has no photo_path column yet - saving without it');
+        const rest = { ...operation.row };
+        delete rest.photo_path;
+        const { error: retryError } = await save(rest);
+        if (retryError) throw retryError;
+        return;
+      }
+      throw error;
     }
     case 'deleteStudent': {
       // Their calls go with them: student_visits cascades on delete
@@ -177,6 +195,21 @@ const applyOperation = async (userId: string, operation: PendingOperation): Prom
       const { error } = await supabase
         .from('student_visits')
         .upsert({ ...operation.row, user_id: userId }, { onConflict: 'id' });
+      if (error) throw error;
+      return;
+    }
+    case 'uploadPhoto': {
+      const photo = await readLocalPhoto(operation.path);
+      // Removed again before it ever went up: nothing to send
+      if (!photo) return;
+      const { error } = await supabase.storage
+        .from(PHOTO_BUCKET)
+        .upload(operation.path, photo, { contentType: photo.type || 'image/jpeg', upsert: true });
+      if (error) throw error;
+      return;
+    }
+    case 'deletePhoto': {
+      const { error } = await supabase.storage.from(PHOTO_BUCKET).remove([operation.path]);
       if (error) throw error;
       return;
     }

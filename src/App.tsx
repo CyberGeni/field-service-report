@@ -189,6 +189,8 @@ function App() {
             onPauseTimer={pauseTimer}
             onStopTimer={stopTimer}
             onSetServiceType={setServiceType}
+            onOpenPerson={openPerson}
+            onOpenPeople={() => setActiveTab('students')}
           />
         );
       case 'home':

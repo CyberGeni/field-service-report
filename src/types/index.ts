@@ -92,6 +92,8 @@ export interface Student {
   preferred_time?: string;
   // A day they asked to be called on
   next_visit_date?: string;
+  // A photo of where they live, as a path in the people-photos bucket
+  photo_path?: string;
   created_at: string;
   updated_at: string;
 }

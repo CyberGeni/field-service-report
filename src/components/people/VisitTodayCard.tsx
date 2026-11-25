@@ -3,19 +3,26 @@ import { BookOpen, Check, MapPin } from 'lucide-react';
 import { useStudents } from '../../hooks/useStudents';
 import { usePlanClock } from '../../hooks/usePlanClock';
 import { getDateString } from '../../utils/dateUtils';
-import { DueVisit, formatShortDate, getVisitsDueOn } from '../../utils/people';
+import { DueVisit, formatShortDate, getVisitsDueOn, parseLocalDate, WEEKDAY_SHORT } from '../../utils/people';
 import { useToast } from '../ui/toast';
+import { PersonAvatar, PersonPhoto } from './PersonBits';
 
 interface VisitTodayCardProps {
   // Opens a person's page; left out, the cards are not tappable
   onOpenPerson?: (personId: string) => void;
 }
 
-const reasonText = (due: DueVisit): string => {
+/** "Study · usually 11am", "Return visit · asked for today", "Return visit · overdue since Mon". */
+const statusLine = (due: DueVisit, today: string): string => {
   const { person, reason } = due;
-  if (reason === 'overdue') return `Overdue · was due ${formatShortDate(person.next_visit_date!)}`;
-  if (reason === 'promised') return 'Said to come back today';
-  return `Usually home today${person.preferred_time ? ` · ${person.preferred_time.toLowerCase()}` : ''}`;
+  const kind = person.status === 'study' ? 'Study' : 'Return visit';
+  if (reason === 'overdue') {
+    const days = Math.round((parseLocalDate(today).getTime() - parseLocalDate(person.next_visit_date!).getTime()) / 86400000);
+    const since = days <= 6 ? WEEKDAY_SHORT[parseLocalDate(person.next_visit_date!).getDay()] : formatShortDate(person.next_visit_date!);
+    return `${kind} · overdue since ${since}`;
+  }
+  if (reason === 'promised') return `${kind} · asked for today`;
+  return `${kind} · ${person.preferred_time ? `usually ${person.preferred_time.toLowerCase()}` : 'usually home today'}`;
 };
 
 /**
@@ -48,108 +55,101 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
   const markVisited = async (item: DueVisit) => {
     try {
       await saveStudentVisit({ student_id: item.person.id, visit_date: today }, { silent: true });
-      addToast({
-        type: 'success',
-        title: 'Visited',
-        description: `${item.person.name} is ticked off for today`,
-        duration: 3000
-      });
+      addToast({ type: 'success', title: 'Visited', description: `${item.person.name} is ticked off for today`, duration: 3000 });
     } catch (err) {
       console.error('Could not mark visited:', err);
       addToast({ type: 'error', title: 'Not saved', description: 'Could not mark that visit. Please try again.' });
     }
   };
 
-  const undoVisited = async (visitId: string) => {
-    try {
-      await deleteStudentVisit(visitId, { silent: true });
-    } catch (err) {
-      console.error('Could not undo visit:', err);
-    }
-  };
-
   return (
-    <section aria-labelledby="visit-today-title" className="bg-white rounded-xl p-5 space-y-3">
-      <div className="flex items-baseline justify-between">
-        <h3 id="visit-today-title" className="text-lg font-semibold text-gray-800">Visit today</h3>
+    <section aria-labelledby="visit-today-title" className="bg-white rounded-2xl p-4 pt-[18px] space-y-3 shadow-sm">
+      <div className="flex items-baseline justify-between px-0.5">
+        <h2 id="visit-today-title" className="text-lg font-semibold text-gray-800 font-libre-franklin">Visit today</h2>
         <span className="text-sm text-gray-600">
           {doneCount} of {due.length} done
         </span>
       </div>
 
-      <ul className="space-y-2.5">
+      <ul className="space-y-3">
         {due.map(item => {
           const { person, visitedToday } = item;
           const undoable = visitedToday ? undoableVisit(person.id) : undefined;
-          const isStudy = person.status === 'study';
+          const hasDetails = Boolean(person.address || person.publication_left || person.place_stopped || person.photo_path);
 
           return (
             <li
               key={person.id}
-              className={`rounded-2xl border p-3.5 flex items-start gap-3 ${
+              className={`rounded-2xl border p-4 flex flex-col gap-3.5 ${
                 visitedToday ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'
               }`}
             >
-              <button
-                type="button"
-                onClick={onOpenPerson ? () => onOpenPerson(person.id) : undefined}
-                disabled={!onOpenPerson}
-                className="flex-1 min-w-0 text-left space-y-1 disabled:cursor-default"
-              >
-                <span className="flex items-center gap-2 flex-wrap">
-                  <span className="text-base font-semibold text-gray-800">{person.name}</span>
-                  <span
-                    className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                      isStudy ? 'text-purple-700 bg-purple-100' : 'text-blue-700 bg-blue-100'
-                    }`}
-                  >
-                    {isStudy ? 'Study' : 'Return visit'}
-                  </span>
-                </span>
-                <span
-                  className={`block text-sm font-semibold ${item.reason === 'overdue' ? 'text-amber-700' : 'text-gray-800'}`}
+              {/* Who, and why today */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onOpenPerson ? () => onOpenPerson(person.id) : undefined}
+                  disabled={!onOpenPerson}
+                  className="flex-1 min-w-0 flex items-center gap-3 text-left disabled:cursor-default"
                 >
-                  {reasonText(item)}
-                </span>
-                {person.address && (
-                  <span className="flex items-center gap-1.5 text-sm text-gray-600">
-                    <MapPin size={14} className="flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate">{person.address}</span>
-                  </span>
-                )}
-                {(person.place_stopped || person.publication_left) && (
-                  <span className="flex items-center gap-1.5 text-sm text-gray-600">
-                    <BookOpen size={14} className="flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate">
-                      {isStudy && person.place_stopped ? person.place_stopped : person.publication_left}
+                  <PersonAvatar name={person.name} status={person.status} />
+                  <span className="min-w-0 flex flex-col gap-0.5">
+                    <span className="text-base font-semibold text-gray-800 truncate">{person.name}</span>
+                    <span className={`text-sm leading-5 line-clamp-2 ${item.reason === 'overdue' ? 'text-amber-700 font-semibold' : 'text-gray-600'}`}>
+                      {statusLine(item, today)}
                     </span>
                   </span>
-                )}
-              </button>
+                </button>
 
-              {/* Both states share one size and border width, so ticking someone off
-                  never shifts the card's text */}
-              {visitedToday ? (
-                <button
-                  type="button"
-                  onClick={undoable ? () => undoVisited(undoable.id) : undefined}
-                  disabled={!undoable}
-                  aria-label={undoable ? `Undo: mark ${person.name} as not visited` : `${person.name} visited today`}
-                  className="flex-shrink-0 w-[104px] h-11 rounded-xl border border-green-600 bg-green-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 disabled:cursor-default"
-                >
-                  <Check size={16} strokeWidth={2.5} aria-hidden="true" />
-                  Visited
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => markVisited(item)}
-                  aria-label={`Mark ${person.name} as visited`}
-                  className="flex-shrink-0 w-[104px] h-11 rounded-xl border border-gray-300 bg-white text-gray-800 text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-gray-50"
-                >
-                  <Check size={16} strokeWidth={2.5} aria-hidden="true" />
-                  Visit
-                </button>
+                {/* Both states share one size and border width, so ticking someone off
+                    never shifts the card's text */}
+                {visitedToday ? (
+                  <button
+                    type="button"
+                    onClick={undoable ? () => deleteStudentVisit(undoable.id, { silent: true }) : undefined}
+                    disabled={!undoable}
+                    aria-label={undoable ? `Undo: mark ${person.name} as not visited` : `${person.name} visited today`}
+                    className="flex-shrink-0 w-[104px] h-11 rounded-xl border border-green-600 bg-green-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 disabled:cursor-default"
+                  >
+                    <Check size={16} strokeWidth={2.5} aria-hidden="true" />
+                    Visited
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => markVisited(item)}
+                    aria-label={`Mark ${person.name} as visited`}
+                    className="flex-shrink-0 w-[104px] h-11 rounded-xl border border-gray-300 bg-white text-gray-800 text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-gray-50"
+                  >
+                    <Check size={16} strokeWidth={2.5} aria-hidden="true" />
+                    Visit
+                  </button>
+                )}
+              </div>
+
+              {/* Where and what: set apart below, lined up under the name */}
+              {hasDetails && (
+                <div className={`ml-[52px] pt-3 border-t flex gap-3 ${visitedToday ? 'border-green-200' : 'border-gray-100'}`}>
+                  <div className="flex-1 min-w-0 space-y-2">
+                    {person.address && (
+                      <p className="flex items-start gap-2 text-sm leading-5 text-gray-700">
+                        <MapPin size={16} className="text-gray-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        {person.address}
+                      </p>
+                    )}
+                    {(person.place_stopped || person.publication_left) && (
+                      <p className="flex items-start gap-2 text-sm leading-5 text-gray-700">
+                        <BookOpen size={16} className="text-gray-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        {person.status === 'study' && person.place_stopped
+                          ? [person.publication_left, person.place_stopped].filter(Boolean).join(' · ')
+                          : person.publication_left}
+                      </p>
+                    )}
+                  </div>
+                  {person.photo_path && (
+                    <PersonPhoto path={person.photo_path} className="w-14 h-11 rounded-lg flex-shrink-0" />
+                  )}
+                </div>
               )}
             </li>
           );
