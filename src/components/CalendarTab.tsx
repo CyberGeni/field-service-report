@@ -3,9 +3,12 @@ import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, X, User } from 'lucide-r
 import { ServiceRecord, ServiceActivity, Settings, Profile } from '../types';
 import { ActivityMeta, getActivityMeta, getAvailableActivities, isCreditActivity } from '../utils/activityTypes';
 import { generateFieldServicePlan } from '../utils/calculations';
-import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes } from '../utils/dateUtils';
+import { getDaysInMonth, getFirstDayOfMonth, formatHoursMinutes } from '../utils/dateUtils';
+import { getDayOverride, getFieldDayOn } from '../utils/fieldDays';
+import DayPlanSheet from './DayPlanSheet';
 import { useToast } from './ui/toast';
 import { useStudents } from '../hooks/useStudents';
+import { usePlanClock } from '../hooks/usePlanClock';
 
 interface CalendarTabProps {
   records: ServiceRecord[];
@@ -13,6 +16,7 @@ interface CalendarTabProps {
   profile?: Profile | null;
   onSaveRecord: (record: ServiceRecord) => void;
   onDeleteRecord?: (id: string) => void;
+  onUpdateSettings: (settings: Partial<Settings>) => Promise<void> | void;
 }
 
 interface StudentVisitEntry {
@@ -205,8 +209,11 @@ const EntryModal: React.FC<EntryModalProps> = ({
               publication_left: '',
               place_stopped: entry.placeStopped.trim(),
               last_visit_date: selectedDate,
-              last_study_notes: entry.notes.trim()
-            });
+              last_study_notes: entry.notes.trim(),
+              // Added from a study logged on the calendar, so a study
+              status: 'study',
+              preferred_days: []
+            }, { silent: true });
             studentId = created.id;
             addToast({ type: 'success', title: 'Student Created', description: `${entry.newName.trim()} added to your students` });
           }
@@ -534,12 +541,14 @@ const EntryModal: React.FC<EntryModalProps> = ({
   );
 };
 
-const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, onSaveRecord, onDeleteRecord }) => {
+const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, onSaveRecord, onDeleteRecord, onUpdateSettings }) => {
   // Volunteer credit is only part of this calendar for a user who does that work
   const activities = getAvailableActivities(profile);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showEntryModal, setShowEntryModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
+  // A day ahead being planned: taken off, or added as a one-off
+  const [planningDate, setPlanningDate] = useState<string | null>(null);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   
@@ -551,15 +560,28 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
 
   const monthKey = `${year}-${(month + 1).toString().padStart(2, '0')}`;
 
+  // The plan depends on the time of day as well as the data, so it is rebuilt when
+  // the evening cutoff or midnight passes with the calendar still open
+  const planPeriod = usePlanClock();
+
   // The same plan the home screen shows, so a day reads the same in both places
   const plannedHoursByDate = useMemo(() => {
     const plan = generateFieldServicePlan(records, settings, monthKey, profile);
     return new Map(plan.days.map(day => [day.date, day.plannedHours]));
-  }, [records, settings, monthKey, profile]);
+    // planPeriod is not read inside, it is what invalidates the plan over time
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [records, settings, monthKey, profile, planPeriod]);
 
-  /** Format hours as a compact string for calendar cells, rounded to 15-min slots. */
+  /**
+   * Format hours as a compact string for calendar cells, in 15-min slots.
+   *
+   * Rounded up, never to nearest: a plan asking for 7 minutes would otherwise read
+   * "0m", and rounding each day down would leave the month short of its target.
+   */
   const formatEstimate = (hours: number): string => {
-    const totalMins = Math.round(hours * 60 / 15) * 15;
+    // The hundredth of a minute keeps float noise (2.0000001h) from spilling into an
+    // extra slot - nothing in the plan is finer than a minute
+    const totalMins = Math.max(15, Math.ceil((hours * 60 - 0.01) / 15) * 15);
     const h = Math.floor(totalMins / 60);
     const m = totalMins % 60;
     if (h === 0) return `${m}m`;
@@ -578,15 +600,11 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev);
-      if (direction === 'prev') {
-        newDate.setMonth(prev.getMonth() - 1);
-      } else {
-        newDate.setMonth(prev.getMonth() + 1);
-      }
-      return newDate;
-    });
+    // Anchored on the 1st: setMonth on the 31st overflows a short month, so January
+    // 31st + 1 month would land on March 3rd and skip February entirely
+    setCurrentDate(prev =>
+      new Date(prev.getFullYear(), prev.getMonth() + (direction === 'prev' ? -1 : 1), 1)
+    );
   };
 
   const getRecordsForDate = (day: number): ServiceRecord[] => {
@@ -631,19 +649,25 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   };
 
   const handleDayClick = (day: number) => {
-    // Prevent clicking on future dates
+    const dateString = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+
+    // Nothing can be logged on a day that has not happened, but it can be planned:
+    // taken off for an event, or added to make up for one
     if (isFutureDate(day)) {
+      setPlanningDate(dateString);
       return;
     }
 
-    const dateString = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
     setSelectedDate(dateString);
     setShowEntryModal(true);
   };
 
   const renderCalendarDay = (day: number) => {
     const date = new Date(year, month, day);
-    const isFieldDay = isFieldServiceDay(date, settings.fieldServiceDays);
+    const dateKey = `${monthKey}-${day.toString().padStart(2, '0')}`;
+    const isFieldDay = getFieldDayOn(settings, dateKey) !== null;
+    const override = getDayOverride(settings, dateKey);
+    const isDayOff = override?.kind === 'off';
     const dayRecords = getRecordsForDate(day);
     const totalTime = getTotalTimeForDate(day);
     const hasRecords = dayRecords.length > 0;
@@ -658,36 +682,48 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
       <button
         key={day}
         onClick={() => handleDayClick(day)}
-        disabled={isFuture}
+        aria-label={isFuture ? `Plan ${date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}` : undefined}
         className={`relative h-20 p-1 w-full text-left transition-colors flex flex-col ${
           isToday
             ? 'bg-blue-100 hover:bg-blue-200'
             : isPlanned
-              ? `bg-blue-50 ${isFuture ? 'cursor-not-allowed' : 'hover:bg-blue-100'}`
-              : isFuture
-                ? 'bg-gray-100 cursor-not-allowed opacity-50'
-                : 'bg-white hover:bg-gray-100'
+              ? 'bg-blue-50 hover:bg-blue-100'
+              : isDayOff
+                ? 'bg-gray-100 hover:bg-gray-200'
+                : isFuture
+                  ? 'bg-gray-50 hover:bg-gray-100'
+                  : 'bg-white hover:bg-gray-100'
         }`}
       >
         {/* Date number at the top */}
         <div className={`text-sm font-medium mb-1 ${
           isToday ? 'text-blue-600' :
           isPlanned ? 'text-blue-600' :
-          isFuture ? 'text-gray-400' :
-          isFieldDay ? 'text-gray-800' : 'text-gray-400'
+          isFuture ? 'text-gray-500' :
+          isFieldDay ? 'text-gray-800' : 'text-gray-500'
         }`}>
           {day}
         </div>
 
+        {/* A day taken off - the plan has moved its hours elsewhere */}
+        {isDayOff && !hasRecords && (
+          <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+            <span className="text-xs font-semibold text-gray-600 leading-tight">Off</span>
+            {override?.note && (
+              <span className="text-[10px] text-gray-600 leading-tight truncate max-w-full">{override.note}</span>
+            )}
+          </div>
+        )}
+
         {/* Past unlogged field day — small grey dot */}
-        {isFieldDay && !hasRecords && !isFuture && !isPlanned && (
+        {isFieldDay && !hasRecords && !isFuture && !isPlanned && !isDayOff && (
           <div className="w-2 h-2 bg-gray-300 rounded-full mb-1" />
         )}
 
         {/* A planned day, and how long to spend on it */}
         {isPlanned && (
           <div className="flex-1 flex items-center justify-center">
-            <span className="text-xs font-medium text-blue-300 leading-tight text-center whitespace-nowrap">
+            <span className="text-xs font-medium text-blue-700 leading-tight text-center whitespace-nowrap">
               {formatEstimate(estimate)}
             </span>
           </div>
@@ -759,7 +795,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
       {/* Instructions */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-2">
         <p className="text-blue-800 text-sm font-medium">
-          💡 Click on any past or current day to record time.
+          💡 Tap a past day or today to record time, or a day ahead to take it off or add it.
         </p>
       </div>
 
@@ -782,8 +818,12 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
             <span>Field service day</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-blue-100 rounded"></div>
+            <div className="w-3 h-3 bg-blue-50 border border-blue-200 rounded"></div>
             <span>Planned day &amp; hours</span>
+          </div>
+          <div className="flex items-center space-x-2">
+            <div className="w-3 h-3 bg-gray-100 border border-gray-300 rounded"></div>
+            <span>Day off</span>
           </div>
         </div>
       </div>
@@ -813,6 +853,15 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
           )}
         </div>
       </div>
+
+      <DayPlanSheet
+        date={planningDate}
+        records={records}
+        settings={settings}
+        profile={profile}
+        onUpdateSettings={onUpdateSettings}
+        onClose={() => setPlanningDate(null)}
+      />
 
       {/* Entry Modal */}
       <EntryModal

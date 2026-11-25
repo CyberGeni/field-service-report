@@ -94,6 +94,37 @@ export const getCurrentServiceYearStart = (): string => {
   return `${now.getMonth() >= 8 ? year : year - 1}-09`;
 };
 
+/**
+ * The service year in progress, as YYYY-MM-DD bounds (start inclusive, end exclusive).
+ *
+ * Records are compared against these as strings, never as Dates: `new Date('2026-09-01')`
+ * is UTC midnight, which west of UTC is still 31 August locally and east of UTC puts
+ * the last day of the year past a local-midnight end bound - so a Date comparison
+ * quietly drops a day (or, through getMonth() on the shifted start, a whole month)
+ * depending on where the user lives.
+ */
+export const getCurrentServiceYearBounds = (): {
+  startYear: number;
+  startMonth: number; // 1-indexed
+  start: string;
+  endExclusive: string;
+} => {
+  const [startYear, startMonth] = getCurrentServiceYearStart().split('-').map(Number);
+  const monthPad = String(startMonth).padStart(2, '0');
+  return {
+    startYear,
+    startMonth,
+    start: `${startYear}-${monthPad}-01`,
+    endExclusive: `${startYear + 1}-${monthPad}-01`
+  };
+};
+
+/** Whether a YYYY-MM-DD (or YYYY-MM) date falls in the service year in progress. */
+export const isInCurrentServiceYear = (date: string): boolean => {
+  const { start, endExclusive } = getCurrentServiceYearBounds();
+  return date >= start.slice(0, date.length) && date < endExclusive.slice(0, date.length);
+};
+
 export const getMonthName = (monthString: string): string => {
   const [year, month] = monthString.split('-');
   const date = new Date(parseInt(year), parseInt(month) - 1);

@@ -1,5 +1,12 @@
 import { ServiceRecord, MonthlyStats, YearlyStats, Settings, Profile, FieldServicePlan, FieldServicePlanDay } from '../types';
-import { getCurrentServiceYearStart, getDaysElapsedInMonth, getTotalMinutes, isPriorityFieldDay } from './dateUtils';
+import {
+  getCurrentMonth,
+  getCurrentServiceYearBounds,
+  getDaysElapsedInMonth,
+  getTotalMinutes,
+  isInCurrentServiceYear
+} from './dateUtils';
+import { getFieldDayOn } from './fieldDays';
 import { getServiceTypeTargets, hasHourRequirement } from './serviceTypes';
 import { isPreachingActivity } from './activityTypes';
 
@@ -79,13 +86,9 @@ export const calculateYearlyStats = (
   profile?: Profile | null
 ): YearlyStats => {
   const currentDate = new Date();
-  const serviceYearStart = new Date(getCurrentServiceYearStart() + '-01');
-  const serviceYearEnd = new Date(serviceYearStart.getFullYear() + 1, serviceYearStart.getMonth(), 0);
-  
-  const yearRecords = records.filter(record => {
-    const recordDate = new Date(record.date);
-    return recordDate >= serviceYearStart && recordDate <= serviceYearEnd;
-  });
+  const { startYear, startMonth } = getCurrentServiceYearBounds();
+
+  const yearRecords = records.filter(record => isInCurrentServiceYear(record.date));
   
   const minutes = splitMinutes(yearRecords);
   const totalHours = minutes.total / 60;
@@ -96,8 +99,13 @@ export const calculateYearlyStats = (
     ? getServiceTypeTargets(profile.service_type).yearlyTarget
     : settings.yearlyTarget;
   
-  const monthsElapsed = Math.floor((currentDate.getTime() - serviceYearStart.getTime()) / (1000 * 60 * 60 * 24 * 30.44));
-  const monthsRemaining = Math.max(0, 12 - monthsElapsed);
+  // Whole calendar months already finished. The month in progress still counts as
+  // remaining here - this card is about the year, and this month is still open to it.
+  const monthsElapsed = Math.min(
+    12,
+    Math.max(0, (currentDate.getFullYear() - startYear) * 12 + (currentDate.getMonth() + 1 - startMonth))
+  );
+  const monthsRemaining = 12 - monthsElapsed;
   
   const hoursNeeded = Math.max(0, targetHours - totalHours);
   const hoursPerMonthNeeded = monthsRemaining > 0 ? hoursNeeded / monthsRemaining : 0;
@@ -120,6 +128,10 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 
 // Hours are only ever planned down to the minute, so anything finer is rounding noise
 const HOUR_EPSILON = 1e-6;
+
+// From this hour the rest of today is treated as spent and the plan starts tomorrow.
+// Exported so screens know when a plan built earlier has gone stale.
+export const PLAN_DAY_CUTOFF_HOUR = 18;
 
 /**
  * Share `hours` out over days that each have their own ceiling.
@@ -213,7 +225,6 @@ const getFutureMonthShare = (
   month: string,
   profile?: Profile | null
 ): number => {
-  const [year, monthNum] = month.split('-').map(Number);
   const usesServiceTypeTargets = profile?.service_type && hasHourRequirement(profile.service_type);
   const monthlyTarget = usesServiceTypeTargets
     ? getServiceTypeTargets(profile!.service_type).monthlyTarget
@@ -222,34 +233,30 @@ const getFutureMonthShare = (
     ? getServiceTypeTargets(profile!.service_type).yearlyTarget
     : settings.yearlyTarget;
 
-  const [serviceYear, serviceMonth] = getCurrentServiceYearStart().split('-').map(Number);
-  const serviceYearStart = new Date(serviceYear, serviceMonth - 1, 1);
-  const serviceYearEndExclusive = new Date(serviceYear + 1, serviceMonth - 1, 1);
-  const plannedMonthStart = new Date(year, monthNum - 1, 1);
-
   // A month outside the running service year has no year-end to be pulled toward
-  if (plannedMonthStart < serviceYearStart || plannedMonthStart >= serviceYearEndExclusive) {
+  if (!isInCurrentServiceYear(month)) {
     return monthlyTarget;
   }
 
-  const serviceYearEnd = new Date(serviceYear + 1, serviceMonth - 1, 0);
   const loggedThisServiceYear = records
-    .filter(record => {
-      const date = new Date(record.date);
-      return date >= serviceYearStart && date <= serviceYearEnd;
-    })
+    .filter(record => isInCurrentServiceYear(record.date))
     .reduce((sum, record) => sum + getTotalMinutes(record.hours, record.minutes) / 60, 0);
 
-  const yearlyHoursNeeded = Math.max(0, yearlyTarget - loggedThisServiceYear);
-  if (yearlyHoursNeeded === 0) return 0;
+  // The month in progress has a plan of its own, and whatever that plan places is
+  // already on its way to the year. Spreading it over the months after this one as
+  // well would ask for those hours twice. Only what this month cannot fit - its
+  // shortfall - is left for the months ahead to make up.
+  const currentMonthPlan = generateFieldServicePlan(records, settings, getCurrentMonth(), profile);
+  const plannedThisMonth = currentMonthPlan.hoursNeeded - currentMonthPlan.shortfallHours;
 
+  const yearlyHoursNeeded = Math.max(0, yearlyTarget - loggedThisServiceYear - plannedThisMonth);
+  if (yearlyHoursNeeded <= HOUR_EPSILON) return 0;
+
+  // Whole months after this one, up to the end of the service year
   const today = new Date();
-  let monthsRemaining = 0;
-  const cursor = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  while (cursor < serviceYearEndExclusive) {
-    monthsRemaining++;
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
+  const { startYear, startMonth } = getCurrentServiceYearBounds();
+  const monthsRemaining =
+    (startYear + 1 - today.getFullYear()) * 12 + (startMonth - (today.getMonth() + 1)) - 1;
 
   return monthsRemaining > 0 ? yearlyHoursNeeded / monthsRemaining : 0;
 };
@@ -298,7 +305,7 @@ export const generateFieldServicePlan = (
   let startDay: number;
   if (isCurrentMonth) {
     // Past 6pm today is effectively spent, so the plan picks up tomorrow
-    startDay = today.getHours() >= 18 ? today.getDate() + 1 : today.getDate();
+    startDay = today.getHours() >= PLAN_DAY_CUTOFF_HOUR ? today.getDate() + 1 : today.getDate();
   } else if (isPastMonth) {
     return emptyPlan; // nothing left to plan in a month already over
   } else {
@@ -319,16 +326,19 @@ export const generateFieldServicePlan = (
     const dateString = `${year}-${monthPad}-${String(day).padStart(2, '0')}`;
     if (workedDates.has(dateString)) continue;
 
-    const weekday = new Date(year, monthNum - 1, day).getDay();
-    const fieldServiceDay = settings.fieldServiceDays.find(fsd => fsd.day === weekday);
-    if (!fieldServiceDay) continue;
+    // A day marked off drops out here, and its hours fall to the days that are left;
+    // a one-off extra day comes in here as a day like any other
+    const fieldDay = getFieldDayOn(settings, dateString);
+    if (!fieldDay) continue;
 
     candidates.push({
       date: dateString,
-      dayName: DAY_NAMES[weekday],
-      type: fieldServiceDay.type,
-      potentialHours: fieldServiceDay.potentialHours,
-      isPriority: isPriorityFieldDay(fieldServiceDay)
+      dayName: DAY_NAMES[new Date(year, monthNum - 1, day).getDay()],
+      type: fieldDay.type,
+      potentialHours: fieldDay.potentialHours,
+      isPriority: fieldDay.isPriority,
+      isOneOff: fieldDay.source === 'override',
+      note: fieldDay.note
     });
   }
 
