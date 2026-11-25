@@ -51,19 +51,38 @@ export interface Profile {
   updated_at?: string;
 }
 
+/**
+ * What someone is to the publisher right now. A return visit is someone met in the
+ * ministry who is worth going back to; a study is someone they study the Bible with.
+ * Return visits often become studies, which is why both are one kind of record.
+ */
+export type PersonStatus = 'return_visit' | 'study';
+
+/** Someone the publisher calls back on - a return visit or a Bible study. */
 export interface Student {
   id: string;
   user_id: string;
   name: string;
+  // May be empty for a return visit added in a hurry at the door
   address: string;
   publication_left?: string;
   place_stopped?: string;
   date_met: string;
   last_visit_date?: string;
   last_study_notes?: string;
+  status: PersonStatus;
+  // Weekdays they are usually home, 0 = Sunday .. 6 = Saturday
+  preferred_days: number[];
+  // When on those days, e.g. "Evening" - free text
+  preferred_time?: string;
+  // A day they asked to be called on
+  next_visit_date?: string;
   created_at: string;
   updated_at: string;
 }
+
+/** The fields a person is created or edited with; the rest are set by the app. */
+export type StudentInput = Omit<Student, 'id' | 'user_id' | 'created_at' | 'updated_at'>;
 
 export interface StudentVisit {
   id: string;
@@ -72,6 +91,8 @@ export interface StudentVisit {
   visit_date: string;
   place_stopped?: string;
   notes?: string;
+  // Whether this call was a Bible study (counted on the report) or a return visit
+  is_study: boolean;
   created_at: string;
   updated_at: string;
 }

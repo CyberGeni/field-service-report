@@ -13,7 +13,7 @@ const Navigation: React.FC<NavigationProps> = ({ activeTab, onTabChange, timerRu
     { id: 'log', label: 'Log', icon: Clock },
     { id: 'home', label: 'Home', icon: Home },
     { id: 'stats', label: 'Stats', icon: BarChart3 },
-    { id: 'students', label: 'Students', icon: Users },
+    { id: 'students', label: 'People', icon: Users },
     { id: 'settings', label: 'Settings', icon: Settings }
   ];
 

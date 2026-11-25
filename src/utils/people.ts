@@ -1,0 +1,108 @@
+import { Student } from '../types';
+
+/**
+ * Why someone is on the list of calls for a day.
+ *
+ * - `promised`: they asked to be called on that very day.
+ * - `overdue`: they asked for a day that has gone by, and nobody called since.
+ * - `usualDay`: no date was agreed, but this is a day they are usually home.
+ */
+export type DueReason = 'promised' | 'overdue' | 'usualDay';
+
+export interface DueVisit {
+  person: Student;
+  reason: DueReason;
+  // Already called on today. They stay on the list, ticked off, so the day's list
+  // reads as a record of what was done as well as what is left.
+  visitedToday: boolean;
+}
+
+const weekdayOf = (date: string): number => {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(year, month - 1, day).getDay();
+};
+
+/** Why `person` is due on `date` (YYYY-MM-DD), or null when they are not. */
+export const getDueReason = (person: Student, date: string): DueReason | null => {
+  const next = person.next_visit_date;
+  const last = person.last_visit_date;
+
+  if (next) {
+    // A date they gave outranks the days they are usually home: someone who said
+    // "come back in two weeks" should not turn up on next week's list
+    if (next > date) return null;
+    if (next === date) return 'promised';
+
+    // The agreed day has passed. Still owed unless a call has been made since - and a
+    // call made today keeps them on today's list, ticked off.
+    if (!last || last < next || last === date) return 'overdue';
+  }
+
+  return person.preferred_days.includes(weekdayOf(date)) ? 'usualDay' : null;
+};
+
+const REASON_ORDER: Record<DueReason, number> = { overdue: 0, promised: 1, usualDay: 2 };
+
+/**
+ * Everyone to call on during `date`, most pressing first: anyone still to visit ahead
+ * of anyone already visited, then overdue before promised before usual days.
+ */
+export const getVisitsDueOn = (people: Student[], date: string): DueVisit[] =>
+  people
+    .map(person => {
+      const reason = getDueReason(person, date);
+      return reason ? { person, reason, visitedToday: person.last_visit_date === date } : null;
+    })
+    .filter((due): due is DueVisit => due !== null)
+    .sort(
+      (a, b) =>
+        Number(a.visitedToday) - Number(b.visitedToday) ||
+        REASON_ORDER[a.reason] - REASON_ORDER[b.reason] ||
+        a.person.name.localeCompare(b.person.name)
+    );
+
+export const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// Chips run Monday first, the way a working week is read
+export const WEEKDAYS_MONDAY_FIRST = [1, 2, 3, 4, 5, 6, 0];
+export const WEEKDAYS = [1, 2, 3, 4, 5];
+export const WEEKEND = [0, 6];
+
+/** "Weekdays", "Weekends", "Mon & Wed", "Tue, Thu & Sat" - or null for no days. */
+export const formatPreferredDays = (days: number[]): string | null => {
+  const set = new Set(days);
+  if (set.size === 0) return null;
+  if (set.size === 7) return 'Any day';
+
+  const sameAs = (group: number[]) => set.size === group.length && group.every(day => set.has(day));
+  if (sameAs(WEEKDAYS)) return 'Weekdays';
+  if (sameAs(WEEKEND)) return 'Weekends';
+
+  const names = WEEKDAYS_MONDAY_FIRST.filter(day => set.has(day)).map(day => WEEKDAY_SHORT[day]);
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+};
+
+/** A YYYY-MM-DD read as the local calendar day it names (never shifted by timezone). */
+export const parseLocalDate = (date: string): Date => {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(year, month - 1, day);
+};
+
+/** "Mon 3 Dec" style, for dates close enough that the year goes without saying. */
+export const formatShortDate = (date: string): string =>
+  parseLocalDate(date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/** The date `days` after `date`, as YYYY-MM-DD. */
+export const addDays = (date: string, days: number): string => {
+  const shifted = parseLocalDate(date);
+  shifted.setDate(shifted.getDate() + days);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${shifted.getFullYear()}-${pad(shifted.getMonth() + 1)}-${pad(shifted.getDate())}`;
+};
+
+/** The next `weekday` strictly after `date` - "next Wednesday" said on a Wednesday is a week on. */
+export const nextWeekday = (date: string, weekday: number): string => {
+  const gap = (weekday - weekdayOf(date) + 7) % 7 || 7;
+  return addDays(date, gap);
+};

@@ -5,7 +5,7 @@ import { useAuth } from './useAuth';
 import { useToast } from '../components/ui/toast';
 import { useOnlineStatus } from './useOnlineStatus';
 import { readCache, writeCache } from '../utils/offlineCache';
-import { enqueueOperation, flushOutbox, readOutbox } from '../utils/offlineSync';
+import { countPendingChanges, enqueueOperation, flushOutbox, readOutbox, subscribeOutbox } from '../utils/offlineSync';
 import { getErrorMessage } from '../utils/errors';
 
 const RECORDS_CACHE = 'records';
@@ -198,7 +198,7 @@ export const useStorage = () => {
     setSyncing(true);
     try {
       const result = await flushOutbox(userId);
-      setPendingChanges(result.pending);
+      setPendingChanges(countPendingChanges(userId));
       return !result.failed;
     } finally {
       setSyncing(false);
@@ -225,7 +225,7 @@ export const useStorage = () => {
       settingsLoadedRef.current = true;
     }
 
-    setPendingChanges(readOutbox(user.id).length);
+    setPendingChanges(countPendingChanges(user.id));
 
     try {
       loadingRef.current = true;
@@ -451,11 +451,11 @@ export const useStorage = () => {
     setRecords(nextRecords);
     cacheRecords(user.id, nextRecords);
 
-    const queued = enqueueOperation(user.id, {
+    enqueueOperation(user.id, {
       kind: isEdit ? 'upsertRecord' : 'replaceDay',
       record: merged
     });
-    setPendingChanges(queued.length);
+    setPendingChanges(countPendingChanges(user.id));
 
     // Best effort: a failure here is not the user's problem, it just waits in the queue
     await syncPendingChanges(user.id);
@@ -473,8 +473,8 @@ export const useStorage = () => {
     setRecords(nextRecords);
     cacheRecords(user.id, nextRecords);
 
-    const queued = enqueueOperation(user.id, { kind: 'deleteRecord', recordId: id });
-    setPendingChanges(queued.length);
+    enqueueOperation(user.id, { kind: 'deleteRecord', recordId: id });
+    setPendingChanges(countPendingChanges(user.id));
 
     await syncPendingChanges(user.id);
   };
@@ -504,8 +504,8 @@ export const useStorage = () => {
     writeCache(SETTINGS_CACHE, user.id, updatedSettings);
     settingsLoadedRef.current = true;
 
-    const queued = enqueueOperation(user.id, { kind: 'saveSettings', row: updateData });
-    setPendingChanges(queued.length);
+    enqueueOperation(user.id, { kind: 'saveSettings', row: updateData });
+    setPendingChanges(countPendingChanges(user.id));
 
     await syncPendingChanges(user.id);
   };
@@ -522,6 +522,14 @@ export const useStorage = () => {
 
     catchUp();
   }, [online, user]);
+
+  // People and their calls are queued by their own hook; the banner's count covers
+  // those too, so it follows every change to either queue
+  useEffect(() => {
+    if (!user) return;
+    setPendingChanges(countPendingChanges(user.id));
+    return subscribeOutbox(() => setPendingChanges(countPendingChanges(user.id)));
+  }, [user]);
 
   return {
     records,

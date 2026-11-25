@@ -3,7 +3,7 @@ import Navigation from './components/Navigation';
 import LogTab from './components/LogTab';
 import HomeTab from './components/HomeTab';
 import CalendarTab from './components/CalendarTab';
-import StudentsTab from './components/StudentsTab';
+import PeopleTab from './components/PeopleTab';
 import StatsPage from './components/StatsPage';
 import ErrorBoundary from './components/ErrorBoundary';
 import SettingsTab from './components/SettingsTab';
@@ -25,6 +25,8 @@ type AuthView = 'splash' | 'signin' | 'signup' | 'forgot-password';
 
 function App() {
   const [activeTab, setActiveTab] = useState('home');
+  // A person tapped somewhere else (today's visit list) to open on the People tab
+  const [openPersonId, setOpenPersonId] = useState<string | null>(null);
   const [authView, setAuthView] = useState<AuthView>('splash');
   // Dismissing only quiets the report prompt for this visit - it is deliberately not
   // persisted, so an unsent report is waiting again next time the app opens.
@@ -167,6 +169,12 @@ function App() {
       />
     );
   }
+  const openPerson = (personId: string) => {
+    setOpenPersonId(personId);
+    setActiveTab('students');
+  };
+  const clearOpenPerson = () => setOpenPersonId(null);
+
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'log':
@@ -184,13 +192,13 @@ function App() {
           />
         );
       case 'home':
-        return <HomeTab records={records} settings={settings} profile={profile} />;
+        return <HomeTab records={records} settings={settings} profile={profile} onOpenPerson={openPerson} />;
       case 'calendar':
         return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} />;
       case 'stats':
         return <StatsPage records={records} profile={profile} userId={user?.id} />;
       case 'students':
-        return <StudentsTab />;
+        return <PeopleTab openPersonId={openPersonId} onOpenPersonHandled={clearOpenPerson} />;
       case 'settings':
         return (
           <SettingsTab 
@@ -203,7 +211,7 @@ function App() {
           />
         );
       default:
-        return <HomeTab records={records} settings={settings} profile={profile} />;
+        return <HomeTab records={records} settings={settings} profile={profile} onOpenPerson={openPerson} />;
     }
   };
 

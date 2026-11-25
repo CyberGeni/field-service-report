@@ -7,14 +7,16 @@ import { getServiceTypeTargets, hasHourRequirement } from '../utils/serviceTypes
 import { ACTIVITY_META } from '../utils/activityTypes';
 import CircularProgress from './CircularProgress';
 import { usePlanClock } from '../hooks/usePlanClock';
+import VisitTodayCard from './people/VisitTodayCard';
 
 interface HomeTabProps {
   records: ServiceRecord[];
   settings: Settings;
   profile?: Profile | null;
+  onOpenPerson?: (personId: string) => void;
 }
 
-const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
+const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile, onOpenPerson }) => {
   // Everything below is rebuilt from "now" on each render; this just makes sure a
   // render happens when the evening cutoff or midnight changes what "now" plans
   usePlanClock();
@@ -307,6 +309,9 @@ const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
           )}
         </div>
       )}
+
+      {/* Return visits and studies due today - nothing at all on a day nobody is */}
+      <VisitTodayCard onOpenPerson={onOpenPerson} />
 
       {/* Yearly Progress */}
       <div className="bg-white rounded-xl p-6">

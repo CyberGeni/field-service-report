@@ -206,8 +206,11 @@ const EntryModal: React.FC<EntryModalProps> = ({
               publication_left: '',
               place_stopped: entry.placeStopped.trim(),
               last_visit_date: selectedDate,
-              last_study_notes: entry.notes.trim()
-            });
+              last_study_notes: entry.notes.trim(),
+              // Added from a study logged on the calendar, so a study
+              status: 'study',
+              preferred_days: []
+            }, { silent: true });
             studentId = created.id;
             addToast({ type: 'success', title: 'Student Created', description: `${entry.newName.trim()} added to your students` });
           }
