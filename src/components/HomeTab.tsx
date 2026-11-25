@@ -6,6 +6,7 @@ import { getCurrentMonth, getMonthName, formatHoursMinutes, formatHoursMinutesSh
 import { getServiceTypeTargets, hasHourRequirement } from '../utils/serviceTypes';
 import { ACTIVITY_META } from '../utils/activityTypes';
 import CircularProgress from './CircularProgress';
+import { usePlanClock } from '../hooks/usePlanClock';
 
 interface HomeTabProps {
   records: ServiceRecord[];
@@ -14,6 +15,10 @@ interface HomeTabProps {
 }
 
 const HomeTab: React.FC<HomeTabProps> = ({ records, settings, profile }) => {
+  // Everything below is rebuilt from "now" on each render; this just makes sure a
+  // render happens when the evening cutoff or midnight changes what "now" plans
+  usePlanClock();
+
   const currentMonth = getCurrentMonth();
   const monthlyStats = calculateMonthlyStats(records, settings, currentMonth, profile);
   const yearlyStats = calculateYearlyStats(records, settings, profile);

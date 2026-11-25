@@ -6,6 +6,7 @@ import { generateFieldServicePlan } from '../utils/calculations';
 import { getDaysInMonth, getFirstDayOfMonth, isFieldServiceDay, formatHoursMinutes } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
 import { useStudents } from '../hooks/useStudents';
+import { usePlanClock } from '../hooks/usePlanClock';
 
 interface CalendarTabProps {
   records: ServiceRecord[];
@@ -551,15 +552,28 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
 
   const monthKey = `${year}-${(month + 1).toString().padStart(2, '0')}`;
 
+  // The plan depends on the time of day as well as the data, so it is rebuilt when
+  // the evening cutoff or midnight passes with the calendar still open
+  const planPeriod = usePlanClock();
+
   // The same plan the home screen shows, so a day reads the same in both places
   const plannedHoursByDate = useMemo(() => {
     const plan = generateFieldServicePlan(records, settings, monthKey, profile);
     return new Map(plan.days.map(day => [day.date, day.plannedHours]));
-  }, [records, settings, monthKey, profile]);
+    // planPeriod is not read inside, it is what invalidates the plan over time
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [records, settings, monthKey, profile, planPeriod]);
 
-  /** Format hours as a compact string for calendar cells, rounded to 15-min slots. */
+  /**
+   * Format hours as a compact string for calendar cells, in 15-min slots.
+   *
+   * Rounded up, never to nearest: a plan asking for 7 minutes would otherwise read
+   * "0m", and rounding each day down would leave the month short of its target.
+   */
   const formatEstimate = (hours: number): string => {
-    const totalMins = Math.round(hours * 60 / 15) * 15;
+    // The hundredth of a minute keeps float noise (2.0000001h) from spilling into an
+    // extra slot - nothing in the plan is finer than a minute
+    const totalMins = Math.max(15, Math.ceil((hours * 60 - 0.01) / 15) * 15);
     const h = Math.floor(totalMins / 60);
     const m = totalMins % 60;
     if (h === 0) return `${m}m`;
@@ -578,15 +592,11 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      const newDate = new Date(prev);
-      if (direction === 'prev') {
-        newDate.setMonth(prev.getMonth() - 1);
-      } else {
-        newDate.setMonth(prev.getMonth() + 1);
-      }
-      return newDate;
-    });
+    // Anchored on the 1st: setMonth on the 31st overflows a short month, so January
+    // 31st + 1 month would land on March 3rd and skip February entirely
+    setCurrentDate(prev =>
+      new Date(prev.getFullYear(), prev.getMonth() + (direction === 'prev' ? -1 : 1), 1)
+    );
   };
 
   const getRecordsForDate = (day: number): ServiceRecord[] => {
@@ -687,7 +697,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
         {/* A planned day, and how long to spend on it */}
         {isPlanned && (
           <div className="flex-1 flex items-center justify-center">
-            <span className="text-xs font-medium text-blue-300 leading-tight text-center whitespace-nowrap">
+            <span className="text-xs font-medium text-blue-700 leading-tight text-center whitespace-nowrap">
               {formatEstimate(estimate)}
             </span>
           </div>
@@ -782,7 +792,7 @@ const CalendarTab: React.FC<CalendarTabProps> = ({ records, settings, profile, o
             <span>Field service day</span>
           </div>
           <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 bg-blue-100 rounded"></div>
+            <div className="w-3 h-3 bg-blue-50 border border-blue-200 rounded"></div>
             <span>Planned day &amp; hours</span>
           </div>
         </div>
