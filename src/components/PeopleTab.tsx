@@ -343,7 +343,7 @@ const PersonDetails: React.FC<PersonDetailsProps> = ({ person, onBack, onEdit, o
           <div className="flex items-start gap-3">
             <BookOpen size={16} className="text-gray-500 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-gray-700">{isStudy ? 'Studying' : 'Left with them'}</p>
+              <p className="text-sm font-medium text-gray-700">{isStudy ? 'Studying' : 'Publication left with them'}</p>
               <p className="text-sm text-gray-600">{person.publication_left}</p>
             </div>
           </div>

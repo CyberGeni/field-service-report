@@ -269,7 +269,7 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
 
             <div className="space-y-1.5">
               <label htmlFor="person-publication" className="block text-sm font-semibold text-gray-800">
-                {form.status === 'study' ? 'Studying' : 'Left with them'}
+                {form.status === 'study' ? 'Studying' : 'Publication left with them'}
               </label>
               <input
                 id="person-publication"
