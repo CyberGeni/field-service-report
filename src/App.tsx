@@ -200,7 +200,7 @@ function App() {
       case 'calendar':
         return <CalendarTab records={records} settings={settings} profile={profile} onSaveRecord={saveRecord} onDeleteRecord={deleteRecord} onUpdateSettings={updateSettings} />;
       case 'stats':
-        return <StatsPage records={records} profile={profile} userId={user?.id} />;
+        return <StatsPage records={records} settings={settings} profile={profile} userId={user?.id} />;
       case 'students':
         return <PeopleTab openPersonId={openPersonId} onOpenPersonHandled={clearOpenPerson} />;
       case 'settings':

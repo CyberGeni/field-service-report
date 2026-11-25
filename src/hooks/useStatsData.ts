@@ -25,13 +25,6 @@ export interface MonthlyStatPoint {
   weeklyAverage: number;
 }
 
-export const STATS_PERIOD_OPTIONS: { value: StatsPeriod; label: string }[] = [
-  { value: 'lastQuarter', label: 'Last Quarter' },
-  { value: 'calendarYear', label: 'Calendar Year' },
-  { value: 'serviceYear', label: 'Service Year' },
-  { value: 'allTime', label: 'All Time' }
-];
-
 // Whole calendar months are the unit here, so a "quarter" is the current month plus
 // the two before it rather than a rolling 90 days that would cut a month in half.
 const QUARTER_MONTH_SPAN = 3;
