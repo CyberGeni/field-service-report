@@ -3,6 +3,8 @@ import { X } from 'lucide-react';
 import { PersonStatus, Student, StudentInput } from '../../types';
 import { useStudents } from '../../hooks/useStudents';
 import { PhotoField } from './PersonBits';
+import BottomSheet from '../ui/BottomSheet';
+import Segmented from '../ui/Segmented';
 import { getDateString } from '../../utils/dateUtils';
 import {
   WEEKDAYS,
@@ -126,17 +128,6 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, person?.id]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   const set = <K extends keyof FormState>(field: K, value: FormState[K]) =>
     setForm(prev => ({ ...prev, [field]: value }));
 
@@ -206,18 +197,8 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
     : form.status === 'study' ? 'New Bible study' : 'New return visit';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="person-sheet-title"
-        className="bg-white w-full max-w-md rounded-t-3xl max-h-[92vh] flex flex-col animate-fadeIn"
-      >
-        <div className="flex justify-center pt-2">
-          <span className="w-10 h-1.5 rounded-full bg-gray-300" />
-        </div>
-
-        <div className="flex items-center justify-between pl-5 pr-3 pt-2 pb-1">
+    <BottomSheet open={isOpen} onClose={onClose} labelledBy="person-sheet-title">
+        <div className="flex items-center justify-between pl-5 pr-3 pt-1 pb-1">
           <h2 id="person-sheet-title" className="text-xl font-bold text-gray-800 font-libre-franklin">{title}</h2>
           <button
             type="button"
@@ -237,21 +218,16 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
 
             {/* What they are - only worth asking when it is not already obvious */}
             {(isEdit || defaultStatus === 'study') && (
-              <div role="group" aria-label="Type" className="grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-xl">
-                {(['return_visit', 'study'] as PersonStatus[]).map(status => (
-                  <button
-                    key={status}
-                    type="button"
-                    aria-pressed={form.status === status}
-                    onClick={() => set('status', status)}
-                    className={`h-11 rounded-lg text-[15px] font-semibold ${
-                      form.status === status ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600'
-                    }`}
-                  >
-                    {status === 'study' ? 'Bible study' : 'Return visit'}
-                  </button>
-                ))}
-              </div>
+              <Segmented<PersonStatus>
+                label="Type"
+                value={form.status}
+                onChange={status => set('status', status)}
+                activeClassName={form.status === 'study' ? 'text-purple-700' : 'text-blue-700'}
+                options={[
+                  { value: 'return_visit', label: 'Return visit' },
+                  { value: 'study', label: 'Bible study' }
+                ]}
+              />
             )}
 
             <div className="space-y-1.5">
@@ -499,8 +475,7 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
             <p className="text-center text-[13px] text-gray-600">Saves on your phone even with no signal</p>
           </div>
         </form>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };
 

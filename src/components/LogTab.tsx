@@ -190,7 +190,7 @@ const LogTab: React.FC<LogTabProps> = ({
                   onClick={onOpenPerson ? () => onOpenPerson(person.id) : undefined}
                   className="w-full flex items-center gap-3 py-2.5 text-left"
                 >
-                  <PersonAvatar name={person.name} status={person.status} />
+                  <PersonAvatar status={person.status} />
                   <span className="flex-1 min-w-0 flex flex-col gap-0.5">
                     <span className="text-[15px] font-semibold text-gray-800 truncate">{person.name}</span>
                     <span className="text-sm text-gray-600 truncate">{metSummary(person)}</span>

@@ -4,6 +4,7 @@ import { Profile, ServiceActivity, ServiceRecord } from '../types';
 import { getAvailableActivities } from '../utils/activityTypes';
 import { getDateString, getMonthName } from '../utils/dateUtils';
 import { useToast } from './ui/toast';
+import BottomSheet from './ui/BottomSheet';
 
 interface CreditSheetProps {
   isOpen: boolean;
@@ -29,7 +30,8 @@ const KIND_STYLE: Record<string, { on: string; label: string; placeholder: strin
 const CreditSheet: React.FC<CreditSheetProps> = ({ isOpen, onClose, profile, onSaveRecord }) => {
   const { addToast } = useToast();
   const kinds = getAvailableActivities(profile).filter(activity => !activity.timed);
-  const [kind, setKind] = useState<ServiceActivity | null>(null);
+  // Set from the start, so the sheet has something to show on its very first frame
+  const [kind, setKind] = useState<ServiceActivity | null>(() => kinds[0]?.id ?? null);
   const [hours, setHours] = useState('');
   const [minutes, setMinutes] = useState('');
   const [date, setDate] = useState(() => getDateString(new Date()));
@@ -47,16 +49,8 @@ const CreditSheet: React.FC<CreditSheetProps> = ({ isOpen, onClose, profile, onS
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
-
-  if (!isOpen || !kind) return null;
+  // Nobody without a credit to log is offered this sheet in the first place
+  if (!kind) return null;
 
   const meta = kinds.find(activity => activity.id === kind)!;
 
@@ -98,12 +92,8 @@ const CreditSheet: React.FC<CreditSheetProps> = ({ isOpen, onClose, profile, onS
     'w-full h-12 px-3.5 bg-gray-50 rounded-xl border border-gray-300 text-base text-gray-800 placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
-      <div role="dialog" aria-modal="true" aria-labelledby="credit-title" className="bg-white w-full max-w-md rounded-t-3xl max-h-[92vh] flex flex-col animate-fadeIn">
-        <div className="flex justify-center pt-2">
-          <span className="w-10 h-1.5 rounded-full bg-gray-300" />
-        </div>
-        <div className="flex items-center justify-between pl-5 pr-3 pt-2">
+    <BottomSheet open={isOpen} onClose={onClose} labelledBy="credit-title">
+        <div className="flex items-center justify-between pl-5 pr-3 pt-1">
           <h2 id="credit-title" className="text-xl font-bold text-gray-800 font-libre-franklin">Log a credit</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="w-11 h-11 flex items-center justify-center rounded-xl text-gray-600 hover:bg-gray-100">
             <X size={22} />
@@ -164,8 +154,7 @@ const CreditSheet: React.FC<CreditSheetProps> = ({ isOpen, onClose, profile, onS
             Save credit
           </button>
         </div>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };
 

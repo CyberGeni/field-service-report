@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowLeft,
   BookOpen,
@@ -29,6 +30,10 @@ import {
 import PersonSheet from './people/PersonSheet';
 import { PersonAvatar, PersonPhoto, PhotoField } from './people/PersonBits';
 import { useToast } from './ui/toast';
+import BottomSheet from './ui/BottomSheet';
+import Dialog from './ui/Dialog';
+import Segmented from './ui/Segmented';
+import { dur, ease, spring } from '../lib/motion';
 
 // Read as local calendar days: `new Date('2026-11-26')` is UTC midnight, which west
 // of UTC is still the 25th and would print as the day before
@@ -77,8 +82,6 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, visit?.id]);
 
-  if (!isOpen) return null;
-
   const isStudy = visit ? visit.is_study : person.status === 'study';
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -113,12 +116,8 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
     'w-full h-12 px-3.5 bg-gray-50 rounded-xl border border-gray-300 text-base text-gray-800 placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-end justify-center">
-      <div role="dialog" aria-modal="true" aria-labelledby="visit-modal-title" className="bg-white w-full max-w-md rounded-t-3xl max-h-[92vh] flex flex-col animate-fadeIn">
-        <div className="flex justify-center pt-2">
-          <span className="w-10 h-1.5 rounded-full bg-gray-300" />
-        </div>
-        <div className="flex items-start justify-between pl-5 pr-3 pt-2">
+    <BottomSheet open={isOpen} onClose={onClose} labelledBy="visit-modal-title">
+        <div className="flex items-start justify-between pl-5 pr-3 pt-1">
           <div>
             <h2 id="visit-modal-title" className="text-xl font-bold text-gray-800 font-libre-franklin">
               {visit ? 'Edit visit' : 'Record visit'}
@@ -178,8 +177,7 @@ const VisitModal: React.FC<VisitModalProps> = ({ isOpen, onClose, person, visit 
             )}
           </div>
         </form>
-      </div>
-    </div>
+    </BottomSheet>
   );
 };
 
@@ -190,25 +188,30 @@ const DeleteConfirmModal: React.FC<{ person: Student | null; onClose: () => void
   onClose,
   onConfirm
 }) => {
-  if (!person) return null;
+  // Shown until the dialog has finished fading out, after `person` is cleared
+  const last = useRef(person);
+  if (person) last.current = person;
+  const shown = person ?? last.current;
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div role="alertdialog" aria-modal="true" aria-labelledby="delete-title" className="bg-white rounded-2xl max-w-sm w-full p-6">
+    <Dialog open={person !== null} onClose={onClose} role="alertdialog" labelledBy="delete-title" className="max-w-sm p-6">
+      {shown && (
+        <>
         <div className="flex items-center gap-3 mb-4">
           <div className="bg-red-100 p-2 rounded-lg">
             <Trash2 size={20} className="text-red-600" />
           </div>
-          <h3 id="delete-title" className="text-lg font-semibold text-gray-800">Delete {kindLabel(person.status).toLowerCase()}</h3>
+          <h3 id="delete-title" className="text-lg font-semibold text-gray-800">Delete {kindLabel(shown.status).toLowerCase()}</h3>
         </div>
         <p className="text-gray-600 mb-6">
-          Delete <strong>{person.name}</strong> and every visit recorded with them? This cannot be undone.
+          Delete <strong>{shown.name}</strong> and every visit recorded with them? This cannot be undone.
         </p>
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 h-12 rounded-xl font-semibold">Cancel</button>
           <button onClick={onConfirm} className="flex-1 bg-red-600 hover:bg-red-700 text-white h-12 rounded-xl font-semibold">Delete</button>
         </div>
-      </div>
-    </div>
+        </>
+      )}
+    </Dialog>
   );
 };
 
@@ -292,8 +295,8 @@ const PersonDetails: React.FC<PersonDetailsProps> = ({ person, onBack, onEdit, o
         </span>
       </div>
 
-      <div className="flex items-center gap-3.5 px-1">
-        <PersonAvatar name={person.name} status={person.status} size="lg" />
+      <div className="flex items-center gap-2.5 px-1">
+        <PersonAvatar status={person.status} size="lg" />
         <div className="min-w-0 flex flex-col gap-1 items-start">
           <h1 className="text-[26px] leading-tight font-bold text-gray-800 font-libre-franklin break-words">{person.name}</h1>
           <span className={`text-[13px] font-semibold px-2.5 py-0.5 rounded-full ${isStudy ? 'text-purple-700 bg-purple-100' : 'text-blue-700 bg-blue-100'}`}>
@@ -482,6 +485,7 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
   return (
     <div className="space-y-4">
       {selected ? (
+        <motion.div key={`person-${selected.id}`} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: dur.slow, ease }}>
         <PersonDetails
           person={selected}
           onBack={() => setSelectedId(null)}
@@ -490,39 +494,36 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
           onRecordVisit={() => setVisitModal({ visit: null })}
           onEditVisit={visit => setVisitModal({ visit })}
         />
+        </motion.div>
       ) : (
-        <>
+        <motion.div key="people-list" className="space-y-4" initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: dur.slow, ease }}>
           <div className="pt-2 space-y-1">
             <h1 className="text-[28px] font-bold text-gray-800 font-libre-franklin tracking-tight">People</h1>
             <p className="text-[15px] text-gray-600">Return visits and Bible studies</p>
           </div>
 
-          <div role="group" aria-label="Show" className="grid grid-cols-2 gap-1 bg-gray-200 p-1 rounded-2xl">
-            {(['return_visit', 'study'] as PersonStatus[]).map(status => {
-              const count = status === 'study' ? studies.length : returnVisits.length;
-              const on = segment === status;
-              return (
-                <button
-                  key={status}
-                  aria-pressed={on}
-                  onClick={() => setSegment(status)}
-                  className={`h-11 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 ${
-                    on ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600'
-                  }`}
-                >
+          <Segmented<PersonStatus>
+            label="Show"
+            value={segment}
+            onChange={setSegment}
+            trackClassName="bg-gray-200"
+            options={(['return_visit', 'study'] as PersonStatus[]).map(status => ({
+              value: status,
+              label: (
+                <>
                   {status === 'study' ? 'Studies' : 'Return visits'}
                   {/* In its own pill, so the count never reads as part of the label */}
                   <span
-                    className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center tabular-nums ${
-                      on ? 'bg-blue-100 text-blue-700' : 'bg-gray-300 text-gray-700'
+                    className={`min-w-[22px] h-[22px] px-1.5 rounded-full text-xs font-bold inline-flex items-center justify-center tabular-nums transition-colors ${
+                      segment === status ? 'bg-blue-100 text-blue-700' : 'bg-gray-300 text-gray-700'
                     }`}
                   >
-                    {count}
+                    {status === 'study' ? studies.length : returnVisits.length}
                   </span>
-                </button>
-              );
-            })}
-          </div>
+                </>
+              )
+            }))}
+          />
 
           <div className="flex gap-2">
             <div className="flex-1 relative">
@@ -547,6 +548,7 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
 
           {shown.length > 0 ? (
             <ul className="space-y-3">
+              <AnimatePresence initial={false} mode="popLayout">
               {shown.map(person => {
                 const status = getPersonStatus(person, today);
                 const bookLine =
@@ -554,20 +556,27 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
                     ? [person.publication_left, person.place_stopped].filter(Boolean).join(' · ')
                     : person.publication_left;
                 return (
-                  <li key={person.id}>
+                  <motion.li
+                    key={person.id}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: dur.fast } }}
+                    transition={spring}
+                  >
                     <button
                       onClick={() => setSelectedId(person.id)}
                       className="w-full text-left bg-white rounded-2xl p-4 flex flex-col gap-3.5 shadow-sm hover:shadow-md transition-shadow"
                     >
                       <span className="flex items-center gap-3 w-full">
-                        <PersonAvatar name={person.name} status={person.status} />
+                        <PersonAvatar status={person.status} />
                         <span className="flex-1 min-w-0 flex flex-col gap-0.5">
                           <span className="text-base font-semibold text-gray-800 truncate">{person.name}</span>
                           <span className={`text-sm truncate ${statusToneClass(status.tone)}`}>{status.text}</span>
                         </span>
                         <ChevronRight size={20} className="text-gray-400 flex-shrink-0" aria-hidden="true" />
                       </span>
-                      <span className="ml-[52px] pt-3 border-t border-gray-100 flex flex-col gap-2">
+                      <span className="ml-8 pt-3 border-t border-gray-100 flex flex-col gap-2">
                         {person.address && (
                           <span className="flex items-start gap-2 text-sm leading-5 text-gray-700">
                             <MapPin size={16} className="text-gray-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
@@ -583,9 +592,10 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
                         <span className="text-[13px] text-gray-500">{lastLine(person)}</span>
                       </span>
                     </button>
-                  </li>
+                  </motion.li>
                 );
               })}
+              </AnimatePresence>
             </ul>
           ) : (
             <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
@@ -611,7 +621,7 @@ const PeopleTab: React.FC<PeopleTabProps> = ({ openPersonId, onOpenPersonHandled
               )}
             </div>
           )}
-        </>
+        </motion.div>
       )}
 
       <PersonSheet isOpen={sheet !== null} person={sheet?.person} defaultStatus={segment} onClose={() => setSheet(null)} />

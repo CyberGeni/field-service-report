@@ -1,5 +1,7 @@
 import React, { useMemo } from 'react';
 import { BookOpen, Check, MapPin } from 'lucide-react';
+import { motion } from 'motion/react';
+import { spring } from '../../lib/motion';
 import { useStudents } from '../../hooks/useStudents';
 import { usePlanClock } from '../../hooks/usePlanClock';
 import { getDateString } from '../../utils/dateUtils';
@@ -78,9 +80,11 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
           const hasDetails = Boolean(person.address || person.publication_left || person.place_stopped || person.photo_path);
 
           return (
-            <li
+            <motion.li
               key={person.id}
-              className={`rounded-2xl border p-4 flex flex-col gap-3.5 ${
+              layout
+              transition={spring}
+              className={`rounded-2xl border p-4 flex flex-col gap-3.5 transition-colors duration-300 ${
                 visitedToday ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'
               }`}
             >
@@ -92,7 +96,7 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
                   disabled={!onOpenPerson}
                   className="flex-1 min-w-0 flex items-center gap-3 text-left disabled:cursor-default"
                 >
-                  <PersonAvatar name={person.name} status={person.status} />
+                  <PersonAvatar status={person.status} />
                   <span className="min-w-0 flex flex-col gap-0.5">
                     <span className="text-base font-semibold text-gray-800 truncate">{person.name}</span>
                     <span className={`text-sm leading-5 line-clamp-2 ${item.reason === 'overdue' ? 'text-amber-700 font-semibold' : 'text-gray-600'}`}>
@@ -129,7 +133,7 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
 
               {/* Where and what: set apart below, lined up under the name */}
               {hasDetails && (
-                <div className={`ml-[52px] pt-3 border-t flex gap-3 ${visitedToday ? 'border-green-200' : 'border-gray-100'}`}>
+                <div className={`ml-8 pt-3 border-t flex gap-3 ${visitedToday ? 'border-green-200' : 'border-gray-100'}`}>
                   <div className="flex-1 min-w-0 space-y-2">
                     {person.address && (
                       <p className="flex items-start gap-2 text-sm leading-5 text-gray-700">
@@ -151,7 +155,7 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
                   )}
                 </div>
               )}
-            </li>
+            </motion.li>
           );
         })}
       </ul>

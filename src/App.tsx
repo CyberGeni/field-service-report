@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import Navigation from './components/Navigation';
+import { dur, ease } from './lib/motion';
 import LogTab from './components/LogTab';
 import HomeTab from './components/HomeTab';
 import CalendarTab from './components/CalendarTab';
@@ -226,7 +228,15 @@ function App() {
 
           {/* Keyed by tab so switching away from a broken screen clears the error */}
           <ErrorBoundary key={activeTab} onReset={() => setActiveTab('home')}>
-            {renderActiveTab()}
+            {/* Each tab rises in as it opens. There is no exit to wait for: the new
+                screen starts at once, so switching never feels slower than a tap. */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: dur.base, ease }}
+            >
+              {renderActiveTab()}
+            </motion.div>
           </ErrorBoundary>
         </main>
 

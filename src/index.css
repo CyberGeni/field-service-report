@@ -44,9 +44,33 @@ select:focus {
   outline: none;
 }
 
-/* Button hover effects */
+/* Buttons: colour changes ease, and a press dips the button slightly so every tap is
+   acknowledged at once. Only paint and transform are transitioned - "all" would also
+   animate size and position, which is what makes a layout jump. */
 button {
-  transition: all 0.2s ease-in-out;
+  transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Someone who has asked their phone for less motion gets it: no slides, no pulses */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  button:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 /* Animation classes */

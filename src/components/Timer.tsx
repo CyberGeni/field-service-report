@@ -2,6 +2,7 @@ import React from 'react';
 import { Pause, Play, Square } from 'lucide-react';
 import { TimerState } from '../types';
 import { formatHoursMinutesShort, getTimerDisplay } from '../utils/dateUtils';
+import Segmented from './ui/Segmented';
 
 interface TimerProps {
   timerState: TimerState;
@@ -45,21 +46,19 @@ const Timer: React.FC<TimerProps> = ({ timerState, onStart, onPause, onStop, onS
         : 'Today’s plan reached'
     : 'Nothing planned for today';
 
-  const segment = (on: boolean) =>
-    `h-11 rounded-[10px] text-[15px] font-semibold transition-colors ${
-      on ? 'bg-white shadow-sm ' + (isCart ? 'text-purple-700' : 'text-blue-700') : 'text-gray-600'
-    }`;
-
   return (
     <section aria-label="Timer" className="bg-white rounded-[20px] p-5 flex flex-col items-center gap-[18px] shadow-sm">
-      <div role="group" aria-label="Service type" className="grid grid-cols-2 gap-1 bg-gray-100 p-1 rounded-[14px] w-full">
-        <button type="button" aria-pressed={!isCart} onClick={() => onSetServiceType('h2h')} className={segment(!isCart)}>
-          House to house
-        </button>
-        <button type="button" aria-pressed={isCart} onClick={() => onSetServiceType('cart')} className={segment(isCart)}>
-          Cart witnessing
-        </button>
-      </div>
+      <Segmented<'h2h' | 'cart'>
+        label="Service type"
+        value={timerState.serviceType}
+        onChange={onSetServiceType}
+        activeClassName={isCart ? 'text-purple-700' : 'text-blue-700'}
+        className="w-full"
+        options={[
+          { value: 'h2h', label: 'House to house' },
+          { value: 'cart', label: 'Cart witnessing' }
+        ]}
+      />
 
       <div className="relative w-[248px] h-[248px]">
         <svg width="248" height="248" viewBox="0 0 248 248" aria-hidden="true" className="-rotate-90">
@@ -74,7 +73,7 @@ const Timer: React.FC<TimerProps> = ({ timerState, onStart, onPause, onStop, onS
             strokeLinecap="round"
             strokeDasharray={CIRCUMFERENCE}
             strokeDashoffset={CIRCUMFERENCE * (1 - progress)}
-            className="transition-[stroke-dashoffset] duration-500"
+            style={{ transition: 'stroke-dashoffset 500ms cubic-bezier(0.22, 1, 0.36, 1), stroke 250ms ease' }}
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1" aria-live="polite">
