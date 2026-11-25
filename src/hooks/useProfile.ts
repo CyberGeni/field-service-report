@@ -26,7 +26,7 @@ export function useProfile(user: User | null) {
         return
       }
 
-      console.log('Fetching profile for user:', user.id)
+      console.log('Fetching profile')
 
       // Without this the app would offer profile setup to an established user the
       // moment they open it with no signal, and overwrite what they already have.
@@ -45,7 +45,7 @@ export function useProfile(user: User | null) {
       if (fetchError) {
         if (fetchError.code === 'PGRST116') {
           // No profile found - this is expected for new users
-          console.log('No profile found for user:', user.id)
+          console.log('No profile found')
           setProfile(null)
           clearCache(PROFILE_CACHE, user.id)
         } else if (!cached) {
@@ -55,7 +55,7 @@ export function useProfile(user: User | null) {
         return
       }
 
-      console.log('Profile fetched successfully:', data)
+      console.log('Profile fetched successfully')
       setProfile(data)
       writeCache(PROFILE_CACHE, user.id, data)
     } catch (err) {
@@ -75,7 +75,7 @@ export function useProfile(user: User | null) {
         throw new Error('No authenticated user')
       }
 
-      console.log('Creating profile with data:', profileData)
+      console.log('Creating profile with data')
 
       const { data, error: createError } = await supabase
         .from('profiles')
@@ -93,7 +93,7 @@ export function useProfile(user: User | null) {
         throw createError
       }
 
-      console.log('Profile created successfully:', data)
+      console.log('Profile created successfully')
       setProfile(data)
       writeCache(PROFILE_CACHE, user.id, data)
       return data
@@ -109,7 +109,7 @@ export function useProfile(user: User | null) {
         throw new Error('No authenticated user or profile')
       }
 
-      console.log('Updating profile with:', updates)
+      console.log('Updating profile with')
 
       const { data, error: updateError } = await supabase
         .from('profiles')
@@ -123,7 +123,7 @@ export function useProfile(user: User | null) {
         throw updateError
       }
 
-      console.log('Profile updated successfully:', data)
+      console.log('Profile updated successfully')
       setProfile(data)
       writeCache(PROFILE_CACHE, user.id, data)
       return data
@@ -139,7 +139,7 @@ export function useProfile(user: User | null) {
         throw new Error('No authenticated user')
       }
 
-      console.log('Starting avatar upload for file:', file.name, 'Size:', file.size, 'Type:', file.type)
+      console.log('Starting avatar upload for file')
 
       // Validate file
       if (!file.type.startsWith('image/')) {
@@ -155,7 +155,7 @@ export function useProfile(user: User | null) {
       const timestamp = Date.now()
       const fileName = `${user.id}/${timestamp}.${fileExt}`
 
-      console.log('Uploading to storage path:', fileName)
+      console.log('Uploading avatar')
 
       // Clean up existing avatar files for this user
       try {
@@ -176,7 +176,7 @@ export function useProfile(user: User | null) {
       }
 
       // Upload the new file
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(fileName, file, {
           cacheControl: '3600',
@@ -189,7 +189,7 @@ export function useProfile(user: User | null) {
         throw new Error(`Upload failed: ${uploadError.message}`)
       }
 
-      console.log('File uploaded successfully to storage:', uploadData)
+      console.log('File uploaded successfully to storage')
 
       // Get the public URL with cache busting
       const { data: { publicUrl } } = supabase.storage
@@ -198,7 +198,7 @@ export function useProfile(user: User | null) {
 
       // Add cache busting parameter to ensure fresh image loads
       const cacheBustedUrl = `${publicUrl}?t=${timestamp}`
-      console.log('Generated cache-busted public URL:', cacheBustedUrl)
+      console.log('Generated cache-busted public URL')
 
       // Test the URL accessibility
       try {

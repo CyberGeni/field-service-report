@@ -321,7 +321,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
       }
 
       if (avatarUrl) {
-        console.log('Avatar uploaded successfully:', avatarUrl);
+        console.log('Avatar uploaded successfully');
         setLocalProfile(prev => ({ ...prev, avatar_url: avatarUrl }));
         setUploadSuccess(true);
         setImageKey(prev => prev + 1); // Force image refresh
@@ -350,7 +350,7 @@ const EditProfileModal: React.FC<EditProfileModalProps> = ({
   };
 
   const handleImageLoad = () => {
-    console.log('Profile image loaded successfully:', localProfile.avatar_url);
+    console.log('Profile image loaded successfully');
     setImageError(false);
   };
 
@@ -740,7 +740,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   const handleImageLoad = () => {
-    console.log('Profile image loaded successfully:', profile?.avatar_url);
+    console.log('Profile image loaded successfully');
     setImageError(false);
   };
 

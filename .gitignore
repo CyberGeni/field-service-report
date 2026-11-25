@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Personal, per-machine Claude Code settings (shared project settings stay in .claude/settings.json)
+.claude/settings.local.json
+
+# Editor scaffolding from Bolt; the app does not use it
+.bolt/
