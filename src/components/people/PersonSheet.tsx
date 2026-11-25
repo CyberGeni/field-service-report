@@ -25,7 +25,6 @@ interface PersonSheetProps {
   onSaved?: (person: Student) => void;
 }
 
-const BASE_PUBLICATIONS = ['Tract', 'Watchtower', 'Awake!', 'Enjoy Life Forever!'];
 const TIMES = ['Morning', 'Afternoon', 'Evening'];
 
 interface FormState {
@@ -95,7 +94,6 @@ const inputClass =
 const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defaultStatus = 'return_visit', onSaved }) => {
   const { students, saveStudent, updateStudent } = useStudents();
   const [form, setForm] = useState<FormState>(() => emptyForm(defaultStatus));
-  const [customPublication, setCustomPublication] = useState(false);
   const [pickingDate, setPickingDate] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -103,19 +101,16 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
   const isEdit = Boolean(person);
   const today = getDateString(new Date());
 
-  // Publications this user actually leaves, so the ones they use most are a tap away
-  const publications = useMemo(() => {
-    const recent = students
-      .map(student => student.publication_left)
-      .filter((pub): pub is string => Boolean(pub) && !BASE_PUBLICATIONS.includes(pub!));
-    return [...BASE_PUBLICATIONS, ...[...new Set(recent)].slice(0, 2)];
-  }, [students]);
+  // Publications this user has left before, suggested as they type
+  const publications = useMemo(
+    () => [...new Set(students.map(student => student.publication_left).filter((pub): pub is string => Boolean(pub)))],
+    [students]
+  );
 
   useEffect(() => {
     if (!isOpen) return;
     const initial = person ? fromPerson(person) : emptyForm(defaultStatus);
     setForm(initial);
-    setCustomPublication(Boolean(initial.publication_left) && !publications.includes(initial.publication_left));
     setPickingDate(false);
     setError('');
     setSaving(false);
@@ -272,50 +267,23 @@ const PersonSheet: React.FC<PersonSheetProps> = ({ isOpen, onClose, person, defa
               />
             </div>
 
-            <div className="space-y-2">
-              <span className="block text-sm font-semibold text-gray-800">
+            <div className="space-y-1.5">
+              <label htmlFor="person-publication" className="block text-sm font-semibold text-gray-800">
                 {form.status === 'study' ? 'Studying' : 'Left with them'}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {publications.map(pub => {
-                  const on = !customPublication && form.publication_left === pub;
-                  return (
-                    <button
-                      key={pub}
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => {
-                        setCustomPublication(false);
-                        set('publication_left', on ? '' : pub);
-                      }}
-                      className={chipClass(on)}
-                    >
-                      {pub}
-                    </button>
-                  );
-                })}
-                <button
-                  type="button"
-                  aria-pressed={customPublication}
-                  onClick={() => {
-                    setCustomPublication(!customPublication);
-                    set('publication_left', '');
-                  }}
-                  className={chipClass(customPublication)}
-                >
-                  Other
-                </button>
-              </div>
-              {customPublication && (
-                <input
-                  aria-label="Publication"
-                  value={form.publication_left}
-                  onChange={e => set('publication_left', e.target.value)}
-                  className={inputClass}
-                  placeholder="What you left"
-                  autoFocus
-                />
-              )}
+              </label>
+              <input
+                id="person-publication"
+                value={form.publication_left}
+                onChange={e => set('publication_left', e.target.value)}
+                list="person-publication-suggestions"
+                autoComplete="off"
+                className={inputClass}
+                placeholder={form.status === 'study' ? 'The publication you study from' : 'A tract, magazine or brochure'}
+              />
+              {/* What they have left before, offered as the field is typed in */}
+              <datalist id="person-publication-suggestions">
+                {publications.map(pub => <option key={pub} value={pub} />)}
+              </datalist>
             </div>
 
             <div className="space-y-2">

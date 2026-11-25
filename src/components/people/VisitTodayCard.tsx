@@ -127,13 +127,15 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
                 )}
               </button>
 
+              {/* Both states share one size and border width, so ticking someone off
+                  never shifts the card's text */}
               {visitedToday ? (
                 <button
                   type="button"
                   onClick={undoable ? () => undoVisited(undoable.id) : undefined}
                   disabled={!undoable}
                   aria-label={undoable ? `Undo: mark ${person.name} as not visited` : `${person.name} visited today`}
-                  className="flex-shrink-0 h-11 px-3.5 rounded-xl bg-green-600 text-white text-sm font-semibold flex items-center gap-1.5 disabled:cursor-default"
+                  className="flex-shrink-0 w-[104px] h-11 rounded-xl border border-green-600 bg-green-600 text-white text-sm font-semibold flex items-center justify-center gap-1.5 disabled:cursor-default"
                 >
                   <Check size={16} strokeWidth={2.5} aria-hidden="true" />
                   Visited
@@ -143,7 +145,7 @@ const VisitTodayCard: React.FC<VisitTodayCardProps> = ({ onOpenPerson }) => {
                   type="button"
                   onClick={() => markVisited(item)}
                   aria-label={`Mark ${person.name} as visited`}
-                  className="flex-shrink-0 h-11 px-3.5 rounded-xl border border-gray-300 bg-white text-gray-800 text-sm font-semibold flex items-center gap-1.5 hover:bg-gray-50"
+                  className="flex-shrink-0 w-[104px] h-11 rounded-xl border border-gray-300 bg-white text-gray-800 text-sm font-semibold flex items-center justify-center gap-1.5 hover:bg-gray-50"
                 >
                   <Check size={16} strokeWidth={2.5} aria-hidden="true" />
                   Visit
